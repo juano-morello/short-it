@@ -22,10 +22,11 @@ user-controlled names and cannot be trusted with dashboard cookies.
 ## Authentication and authorization
 
 Better Auth email/password uses explicit trusted origins, host-only cookies, static roles,
-and built-in database-backed rate limiting. No email verification or CAPTCHA is planned for
-the demo. New workspace and invitation quotas reduce basic abuse. Nest guards and Prisma
-scopes provide the tenant boundary. The product must never accept a browser-provided
-organization ID as proof of access.
+and its built-in in-memory rate limiter for the single-instance demo. No email verification
+or CAPTCHA is planned for the demo. New workspace and invitation quotas reduce basic abuse.
+Nest guards and Prisma scopes provide the tenant boundary. The product must never accept a
+browser-provided organization ID as proof of access. A shared rate limiter is a prerequisite
+for multi-instance production deployment.
 
 ## Data classification and lifecycle
 

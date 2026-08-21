@@ -10,8 +10,8 @@
   "scripts": {
     "build": "turbo build",
     "dev": "turbo dev --parallel",
-    "test": "turbo test",
-    "test:integration": "turbo test:integration",
+    "test": "turbo test --filter=!@short-it/e2e",
+    "test:integration": "turbo test:integration --filter=!@short-it/e2e",
     "bdd": "turbo bdd",
     "e2e": "turbo e2e",
     "coverage": "turbo coverage",

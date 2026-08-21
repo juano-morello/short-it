@@ -52,8 +52,10 @@ hostname and cookie model.
 ## Security and privacy
 
 Better Auth uses email/password with no verification or delivery integration in v1, static
-workspace roles, trusted origins, and database-backed rate limiting. No CAPTCHA is planned
-for the demo scope. See the threat model for compensating quotas and residual bot risk.
+workspace roles, trusted origins, and its in-memory rate limiter for the single-instance demo.
+No CAPTCHA is planned for the demo scope. A shared rate limiter is required before a
+multi-instance production deployment. See the threat model for compensating quotas and
+residual bot risk.
 
 ## Operations and failure recovery
 

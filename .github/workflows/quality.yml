@@ -30,14 +30,14 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm test:integration
-      - run: docker compose up -d --build
-      - run: BDD_BASE_URL=http://app.localhost:8080 pnpm bdd
-      - run: pnpm e2e
       - run: pnpm coverage
       - run: pnpm db:validate
       - run: pnpm storybook:build
       - run: pnpm compose:config
       - run: pnpm docker:build
       - run: pnpm security
+      - run: docker compose up -d --build
+      - run: BDD_BASE_URL=http://app.localhost:8080 pnpm bdd
+      - run: pnpm e2e
       - if: always()
         run: docker compose down --volumes
