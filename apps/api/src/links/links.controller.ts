@@ -7,20 +7,22 @@ import {
   Req,
   UnauthorizedException,
 } from "@nestjs/common";
-import type { CreateLinkRequest } from "@short-it/contracts";
 import type { Request } from "express";
 import { auth } from "../auth/auth.js";
 import { getConfig } from "../config.js";
 import { LinksService } from "./links.service.js";
 
-type CreateLinkBody = Partial<CreateLinkRequest>;
+type CreateLinkBody = {
+  destinationUrl?: unknown;
+  organizationId?: unknown;
+};
 
 @Controller("api/links")
 export class LinksController {
   constructor(@Inject(LinksService) private readonly linksService: LinksService) {}
 
   @Post()
-  async create(@Body() body: CreateLinkBody, @Req() request: Request) {
+  async create(@Body() body: CreateLinkBody | null | undefined, @Req() request: Request) {
     assertTrustedOrigin(request);
     const session = await auth.api.getSession({ headers: toHeaders(request.headers) });
     if (!session) {
@@ -28,11 +30,17 @@ export class LinksController {
     }
 
     return this.linksService.create({
-      destinationUrl: body.destinationUrl,
-      requestedOrganizationId: body.organizationId,
+      destinationUrl: body?.destinationUrl,
+      requestedOrganizationId: body?.organizationId,
+      requestId: getRequestId(request),
       userId: session.user.id,
     });
   }
+}
+
+function getRequestId(request: Request): string {
+  const value = request.get("x-request-id");
+  return value && /^[a-zA-Z0-9_-]{1,64}$/.test(value) ? value : crypto.randomUUID();
 }
 
 function assertTrustedOrigin(request: Request): void {

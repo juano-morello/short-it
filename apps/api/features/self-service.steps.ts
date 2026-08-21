@@ -4,6 +4,9 @@ import { request } from "node:http";
 import { Given, Then, When } from "@cucumber/cucumber";
 
 const baseUrl = process.env.BDD_BASE_URL ?? "http://app.localhost:8080";
+const dashboardOrigin = process.env.BDD_DASHBOARD_ORIGIN ?? baseUrl;
+const dashboardHostHeader =
+  dashboardOrigin === baseUrl ? {} : { host: new URL(dashboardOrigin).host };
 
 type OrganizationResponse = {
   id: string;
@@ -104,7 +107,8 @@ When("the visitor makes repeated invalid sign-in attempts", async () => {
       }),
       headers: {
         "content-type": "application/json",
-        origin: baseUrl,
+        origin: dashboardOrigin,
+        ...dashboardHostHeader,
       },
       method: "POST",
     });
@@ -121,7 +125,8 @@ When("an unauthenticated visitor submits a request larger than 64 KiB", async ()
     }),
     headers: {
       "content-type": "application/json",
-      origin: baseUrl,
+      origin: dashboardOrigin,
+      ...dashboardHostHeader,
     },
     method: "POST",
   });
@@ -140,7 +145,8 @@ When(
       }),
       headers: {
         "content-type": "application/json",
-        origin: baseUrl,
+        origin: dashboardOrigin,
+        ...dashboardHostHeader,
       },
       method: "POST",
     });
@@ -177,7 +183,8 @@ When("the visitor attempts to register the same account again", async () => {
     }),
     headers: {
       "content-type": "application/json",
-      origin: baseUrl,
+      origin: dashboardOrigin,
+      ...dashboardHostHeader,
     },
     method: "POST",
   });
@@ -227,7 +234,7 @@ Then(
 Then("the request is rejected with 413 and the API remains ready", async () => {
   assert.equal(oversizedRequestStatus, 413);
   assert.equal(chunkedOversizedRequestStatus, 413);
-  const response = await fetch(`${baseUrl}/api/ready`);
+  const response = await fetch(`${baseUrl}/api/ready`, { headers: dashboardHostHeader });
   assert.equal(response.status, 200);
 });
 
@@ -243,7 +250,8 @@ function submitChunkedOversizedRequest(): Promise<number> {
       {
         headers: {
           "content-type": "application/json",
-          origin: baseUrl,
+          origin: dashboardOrigin,
+          ...dashboardHostHeader,
           "transfer-encoding": "chunked",
         },
         hostname: url.hostname,
@@ -301,7 +309,8 @@ async function register(currentVisitor: Visitor): Promise<void> {
     }),
     headers: {
       "content-type": "application/json",
-      origin: baseUrl,
+      origin: dashboardOrigin,
+      ...dashboardHostHeader,
     },
     method: "POST",
   });
@@ -316,7 +325,8 @@ async function register(currentVisitor: Visitor): Promise<void> {
     }),
     headers: {
       "content-type": "application/json",
-      origin: baseUrl,
+      origin: dashboardOrigin,
+      ...dashboardHostHeader,
     },
     method: "POST",
   });
@@ -354,7 +364,8 @@ function requestHeaders(currentVisitor: Visitor): Record<string, string> {
   return {
     "content-type": "application/json",
     cookie: currentVisitor.cookie,
-    origin: baseUrl,
+    origin: dashboardOrigin,
+    ...dashboardHostHeader,
   };
 }
 

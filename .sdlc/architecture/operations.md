@@ -19,7 +19,13 @@ leave Caddy as the public edge or replace this rule with an equivalent trusted-h
 
 The API must emit structured, privacy-safe logs with request IDs. It must not log raw IPs,
 raw user agents, session tokens, invitation URLs, or destination query strings. Product
-metrics include redirect success and failure and analytics-write failures.
+metrics include redirect success and failure and analytics-write failures. Link publication logs
+a request ID, DNS-resolution outcome, and latency without logging the hostname or destination.
+Treat five `unavailable` outcomes in five minutes as a resolver incident: confirm API readiness,
+compare the resolver-outcome log rate with successful publication, check the configured resolver,
+and temporarily roll back the publication API if the 503 rate persists. The demo has no metrics
+backend, dashboard, or alert. Before production, the selected observability provider must chart
+`link_destination_resolution` outcomes and latency and alert on that five-in-five-minute threshold.
 
 ## Health and readiness
 

@@ -1,16 +1,16 @@
-import { ForbiddenException } from "@nestjs/common";
+import { BadRequestException, ForbiddenException } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
 import { LinksService } from "./links.service.js";
 
 describe("LinksService", () => {
   it("persists an immediately published link in the membership-derived workspace", async () => {
-    const database = createDatabase({ organizationId: "trusted-workspace", role: "editor" });
+    const database = createDatabase({ organizationId: "requested-workspace", role: "editor" });
     database.link.create.mockResolvedValue({
       createdAt: new Date("2026-08-21T12:00:00.000Z"),
       destinationUrl: "https://example.com/portfolio",
       id: "cuid-id",
-      organizationId: "trusted-workspace",
+      organizationId: "requested-workspace",
       publishedAt: new Date("2026-08-21T12:00:00.000Z"),
       slug: "cuid-slug",
     });
@@ -26,7 +26,7 @@ describe("LinksService", () => {
         async () => "https://example.com/portfolio",
       ),
     ).resolves.toMatchObject({
-      organizationId: "trusted-workspace",
+      organizationId: "requested-workspace",
       publishedAt: expect.any(Date),
       slug: "cuid-slug",
     });
@@ -42,7 +42,7 @@ describe("LinksService", () => {
     expect(database.link.create).toHaveBeenCalledWith({
       data: {
         destinationUrl: "https://example.com/portfolio",
-        organizationId: "trusted-workspace",
+        organizationId: "requested-workspace",
         publishedAt: expect.any(Date),
       },
       select: expect.any(Object),
@@ -66,6 +66,42 @@ describe("LinksService", () => {
       new ForbiddenException("You do not have permission to publish links in this workspace."),
     );
     expect(database.link.create).not.toHaveBeenCalled();
+  });
+
+  it("does not persist a link when destination validation rejects it", async () => {
+    const database = createDatabase({ organizationId: "workspace-a", role: "editor" });
+
+    await expect(
+      new LinksService().create(
+        {
+          destinationUrl: "https://internal.local/private",
+          requestedOrganizationId: "workspace-a",
+          userId: "member-1",
+        },
+        database as never,
+        async () => {
+          throw new BadRequestException("Link destinations must not resolve privately.");
+        },
+      ),
+    ).rejects.toEqual(new BadRequestException("Link destinations must not resolve privately."));
+    expect(database.link.create).not.toHaveBeenCalled();
+  });
+
+  it("allows a member whose persisted role set includes editor", async () => {
+    const database = createDatabase({ organizationId: "workspace-a", role: "analyst,editor" });
+    database.link.create.mockResolvedValue({ slug: "cmfoo123" });
+
+    await expect(
+      new LinksService().create(
+        {
+          destinationUrl: "https://example.com/portfolio",
+          requestedOrganizationId: "workspace-a",
+          userId: "member-1",
+        },
+        database as never,
+        async () => "https://example.com/portfolio",
+      ),
+    ).resolves.toEqual({ slug: "cmfoo123" });
   });
 
   it("requires a workspace selector before it checks membership", async () => {

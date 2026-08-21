@@ -29,8 +29,8 @@ service generates the public CUID slug and records publication immediately.
   unresolvable, loopback, private, link-local, carrier-grade NAT, multicast, and otherwise
   reserved addresses.
 - The dashboard exposes a destination-only publication form and confirms the generated slug.
-- An application-owned workspace gateway wraps Better Auth calls. A link gateway wraps the
-  application API call.
+- An application-owned workspace gateway wraps Better Auth calls. A link gateway owns the
+  browser-side representation of the application API call; it is not a shared package boundary.
 
 ## Non-goals
 
@@ -82,8 +82,11 @@ contract but does not expose a third-party API.
 ## Risks and dependencies
 
 DNS answers can change after a link is created. WORK-004 must resolve and revalidate the
-destination on the redirect path. Local acceptance tests use a public IP literal where external DNS
-is unavailable; unit tests cover hostname resolution through an injected resolver.
+destination on the redirect path. Publication bounds DNS resolution to ten concurrent requests and
+two seconds, returning a retryable 503 for transient resolver failures. It logs a request ID,
+outcome, and latency without recording a hostname or destination. Local acceptance tests use a
+public IP literal where external DNS is unavailable; unit tests cover hostname resolution through an
+injected resolver.
 
 ## TDD and BDD strategy
 

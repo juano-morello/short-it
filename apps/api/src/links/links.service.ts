@@ -13,6 +13,7 @@ type LinkDatabase = Pick<typeof prisma, "link" | "member">;
 type CreateLinkInput = {
   destinationUrl: unknown;
   requestedOrganizationId: unknown;
+  requestId?: string;
   userId: string;
 };
 
@@ -39,7 +40,11 @@ export class LinksService {
       );
     }
 
-    const destinationUrl = await validateDestination(input.destinationUrl);
+    const destinationUrl = await validateDestination(
+      input.destinationUrl,
+      undefined,
+      input.requestId,
+    );
 
     try {
       return await database.link.create({
@@ -74,7 +79,9 @@ function assertOrganizationId(value: unknown): string {
 }
 
 function canCreateLinks(role: string): boolean {
-  return role === "owner" || role === "editor";
+  return role
+    .split(",")
+    .some((assignedRole) => assignedRole === "owner" || assignedRole === "editor");
 }
 
 function isLinkSlugConflict(error: unknown): boolean {

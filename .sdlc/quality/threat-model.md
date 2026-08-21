@@ -28,8 +28,8 @@ calculating the rate-limit key. Session hooks clear IP and user-agent values bef
 Automatic sign-in after registration is disabled so duplicate registrations receive Better Auth's
 generic response. The browser signs in explicitly before creating the workspace. Sign-in and
 sign-up allow 20 attempts per 10 seconds in the public demo. No email verification or CAPTCHA is
-planned for the demo. New workspace and invitation quotas reduce basic abuse. Nest guards and
-Prisma scopes provide the tenant boundary. The product must never accept a browser-provided
+planned for the demo. New workspace and invitation quotas reduce basic abuse. Authenticated API
+services and Prisma scopes provide the tenant boundary. The product must never accept a browser-provided
 organization ID as proof of access. A shared rate limiter is a prerequisite for multi-instance
 production deployment.
 

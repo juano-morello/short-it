@@ -23,8 +23,9 @@ scenario runs alone against a fresh Compose stack because its counter is intenti
 ## Integration and contract tests
 
 Use Testcontainers PostgreSQL for Prisma migrations, Better Auth organization behavior,
-database scoping, and redirect persistence. Shared contracts prevent dashboard/API shape
-drift.
+database scoping, and redirect persistence. The current internal link API owns its request and
+response representation in its server and browser gateways; a package-level shared contract is
+reserved for a future public or cross-client API.
 
 ## E2E and visual regression
 

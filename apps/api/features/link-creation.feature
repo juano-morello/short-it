@@ -15,12 +15,31 @@ Feature: Workspace link publication
     When the owner publishes a link to "https://93.184.216.34/portfolio"
     Then the published link belongs to that workspace and has a CUID slug
 
-  Scenario Outline: Unsafe destinations are rejected before publishing
-    Given a signed-in workspace owner
-    When the owner publishes a link to "<destination>"
-    Then the link publication is rejected with "<message>"
+  Scenario: An editor can publish a destination link
+    Given a signed-in workspace editor
+    When the editor publishes a link to "https://93.184.216.34/editor"
+    Then the published link belongs to that workspace and has a CUID slug
 
-    Examples:
-      | destination                   | message                                      |
-      | ftp://example.com/archive     | Link destinations must use HTTP or HTTPS.   |
-      | http://127.0.0.1/internal     | Link destinations must not resolve privately. |
+  Scenario: An analyst cannot publish a destination link
+    Given a signed-in workspace analyst
+    When the analyst attempts to publish a link
+    Then the link publication is rejected as forbidden
+
+  Scenario: A workspace member cannot publish in another workspace
+    Given a signed-in workspace editor
+    And a separate workspace exists
+    When the editor attempts to publish a link in the separate workspace
+    Then the link publication is rejected as forbidden
+
+  Scenario: Unsafe destinations are rejected before publishing
+    Given a signed-in workspace owner
+    When the owner publishes a link to "ftp://example.com/archive"
+    Then the link publication is rejected with "Link destinations must use HTTP or HTTPS."
+    When the owner publishes a link to "https://user:secret@example.com"
+    Then the link publication is rejected with "Link destinations must not include credentials."
+    When the owner publishes a link to "http://127.0.0.1/internal"
+    Then the link publication is rejected with "Link destinations must not resolve privately."
+    When the owner publishes a link to "http://[ff02::1]/multicast"
+    Then the link publication is rejected with "Link destinations must not resolve privately."
+    When the owner publishes a link to "https://internal.local/private"
+    Then the link publication is rejected with "Link destinations must not resolve privately."

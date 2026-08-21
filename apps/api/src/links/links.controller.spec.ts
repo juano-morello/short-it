@@ -45,6 +45,7 @@ describe("LinksController", () => {
     expect(linksService.create).toHaveBeenCalledWith({
       destinationUrl: "https://example.com/portfolio",
       requestedOrganizationId: "workspace-1",
+      requestId: expect.any(String),
       userId: "member-1",
     });
   });
@@ -58,6 +59,21 @@ describe("LinksController", () => {
         requestFrom("http://app.localhost:8080"),
       ),
     ).rejects.toEqual(new UnauthorizedException());
+  });
+
+  it("treats a null body as a validation error instead of dereferencing it", async () => {
+    vi.mocked(auth.api.getSession).mockResolvedValue({ user: { id: "member-1" } } as never);
+    linksService.create.mockRejectedValue(new Error("A link destination is required."));
+
+    await expect(
+      new LinksController(linksService as never).create(
+        null,
+        requestFrom("http://app.localhost:8080"),
+      ),
+    ).rejects.toThrow("A link destination is required.");
+    expect(linksService.create).toHaveBeenCalledWith(
+      expect.objectContaining({ destinationUrl: undefined, requestedOrganizationId: undefined }),
+    );
   });
 
   it("rejects a missing or untrusted origin before checking a session", async () => {

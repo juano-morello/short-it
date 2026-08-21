@@ -282,6 +282,39 @@ describe("App", () => {
     });
     expect(screen.queryByLabelText(/slug/i)).not.toBeInTheDocument();
   });
+
+  it("lets a member with editor among multiple roles publish a destination", async () => {
+    vi.mocked(workspaceGateway.getSession).mockResolvedValue({
+      data: { user: { id: "member-1" } },
+    } as never);
+    vi.mocked(workspaceGateway.listWorkspaces).mockResolvedValue({
+      data: [{ id: "workspace-1", name: "Ada Studio", slug: "ada" }],
+    } as never);
+    vi.mocked(workspaceGateway.getWorkspace).mockResolvedValue({
+      data: { members: [{ role: "analyst,editor", userId: "member-1" }] },
+    } as never);
+
+    render(<App />);
+
+    expect(await screen.findByRole("button", { name: "Publish link" })).toBeInTheDocument();
+  });
+
+  it("does not show publishing controls to an analyst", async () => {
+    vi.mocked(workspaceGateway.getSession).mockResolvedValue({
+      data: { user: { id: "member-1" } },
+    } as never);
+    vi.mocked(workspaceGateway.listWorkspaces).mockResolvedValue({
+      data: [{ id: "workspace-1", name: "Ada Studio", slug: "ada" }],
+    } as never);
+    vi.mocked(workspaceGateway.getWorkspace).mockResolvedValue({
+      data: { members: [{ role: "analyst", userId: "member-1" }] },
+    } as never);
+
+    render(<App />);
+
+    expect(await screen.findByText(/cannot publish links/i)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Publish link" })).not.toBeInTheDocument();
+  });
 });
 
 function getForm(buttonName: string): HTMLFormElement {

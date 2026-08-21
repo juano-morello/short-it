@@ -24,8 +24,8 @@ security were considered.
 ## Decision
 
 Use Better Auth's Organization plugin as the workspace and use static owner, editor, and
-analyst roles. Application tables include `organizationId`; Nest guards derive membership
-and scope every query. PostgreSQL RLS is deferred as defense in depth.
+analyst roles. Application tables include `organizationId`; authenticated API services derive
+membership and scope every query. PostgreSQL RLS is deferred as defense in depth.
 
 ## Consequences and tradeoffs
 

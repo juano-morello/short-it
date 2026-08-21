@@ -12,7 +12,7 @@ type Workspace = {
   slug: string;
 };
 
-type WorkspaceRole = "owner" | "editor" | "analyst";
+type WorkspaceRole = string;
 
 const initialForm = {
   email: "",
@@ -413,7 +413,9 @@ function Dashboard({
   value: string;
   workspace: Workspace;
 }) {
-  const canPublish = role === "owner" || role === "editor";
+  const canPublish = role
+    .split(",")
+    .some((assignedRole) => assignedRole === "owner" || assignedRole === "editor");
 
   return (
     <main className="site-shell auth-shell">

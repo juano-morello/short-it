@@ -2,6 +2,7 @@ import { defineConfig } from "vitest/config";
 
 export default defineConfig({
   test: {
+    exclude: ["src/**/*.integration.spec.ts"],
     coverage: {
       provider: "v8",
       all: true,

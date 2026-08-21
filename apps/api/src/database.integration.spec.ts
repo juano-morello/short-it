@@ -77,7 +77,7 @@ describe("PostgreSQL integration", () => {
       },
     });
 
-    expect(link.slug).toMatch(/^c[a-z0-9]+$/);
+    expect(link.slug).toMatch(/^c[a-z0-9]{24}$/);
     expect(link.publishedAt).not.toBeNull();
   });
 
