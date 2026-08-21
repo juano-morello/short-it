@@ -24,4 +24,9 @@ test("a visitor creates an owner workspace", async ({ page }) => {
 
   await expect(page.getByRole("heading", { name: "Ada Studio" })).toBeVisible();
   await expect(page.getByText("Owner", { exact: true })).toBeVisible();
+
+  await page.getByLabel("Destination URL").fill("https://93.184.216.34/portfolio");
+  await page.getByRole("button", { name: "Publish link" }).click();
+
+  await expect(page.getByText(new RegExp(`ada-${suffix}/c[a-z0-9]+`))).toBeVisible();
 });

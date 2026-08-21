@@ -1,29 +1,30 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App.js";
-import { authClient } from "./auth-client.js";
+import { linkGateway } from "./link-gateway.js";
+import { workspaceGateway } from "./workspace-gateway.js";
 
-vi.mock("./auth-client.js", () => ({
-  authClient: {
+vi.mock("./workspace-gateway.js", () => ({
+  workspaceGateway: {
+    createWorkspace: vi.fn(),
     getSession: vi.fn(),
-    organization: {
-      create: vi.fn(),
-      getFullOrganization: vi.fn(),
-      list: vi.fn(),
-    },
-    signIn: {
-      email: vi.fn(),
-    },
-    signUp: {
-      email: vi.fn(),
-    },
+    getWorkspace: vi.fn(),
+    listWorkspaces: vi.fn(),
+    signIn: vi.fn(),
+    signUp: vi.fn(),
+  },
+}));
+
+vi.mock("./link-gateway.js", () => ({
+  linkGateway: {
+    publish: vi.fn(),
   },
 }));
 
 describe("App", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(authClient.getSession).mockResolvedValue({ data: null });
+    vi.mocked(workspaceGateway.getSession).mockResolvedValue({ data: null } as never);
   });
 
   afterEach(cleanup);
@@ -39,11 +40,11 @@ describe("App", () => {
   });
 
   it("lets an authenticated user retry workspace creation after a recoverable failure", async () => {
-    vi.mocked(authClient.getSession).mockResolvedValue({
+    vi.mocked(workspaceGateway.getSession).mockResolvedValue({
       data: { user: { id: "member-1" } },
     } as never);
-    vi.mocked(authClient.organization.list).mockResolvedValue({ data: [] } as never);
-    vi.mocked(authClient.organization.create)
+    vi.mocked(workspaceGateway.listWorkspaces).mockResolvedValue({ data: [] } as never);
+    vi.mocked(workspaceGateway.createWorkspace)
       .mockResolvedValueOnce({ error: { message: "That workspace handle is reserved." } } as never)
       .mockResolvedValueOnce({
         data: { id: "workspace-1", name: "Ada Studio", slug: "ada" },
@@ -59,8 +60,7 @@ describe("App", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "That workspace handle is reserved.",
     );
-    expect(authClient.organization.create).toHaveBeenCalledWith({
-      keepCurrentActiveOrganization: true,
+    expect(workspaceGateway.createWorkspace).toHaveBeenCalledWith({
       name: "Ada Studio",
       slug: "app",
     });
@@ -73,13 +73,13 @@ describe("App", () => {
   });
 
   it("shows a returning owner their first workspace", async () => {
-    vi.mocked(authClient.getSession).mockResolvedValue({
+    vi.mocked(workspaceGateway.getSession).mockResolvedValue({
       data: { user: { id: "member-1" } },
     } as never);
-    vi.mocked(authClient.organization.list).mockResolvedValue({
+    vi.mocked(workspaceGateway.listWorkspaces).mockResolvedValue({
       data: [{ id: "workspace-1", name: "Ada Studio", slug: "ada" }],
     } as never);
-    vi.mocked(authClient.organization.getFullOrganization).mockResolvedValue({
+    vi.mocked(workspaceGateway.getWorkspace).mockResolvedValue({
       data: { members: [{ role: "owner", userId: "member-1" }] },
     } as never);
 
@@ -90,18 +90,18 @@ describe("App", () => {
   });
 
   it("takes a new visitor to sign in after registration", async () => {
-    vi.mocked(authClient.signUp.email).mockResolvedValue({ data: {} } as never);
+    vi.mocked(workspaceGateway.signUp).mockResolvedValue({ data: {} } as never);
 
     render(<App />);
 
     await submitSignUpForm();
 
     expect(await screen.findByRole("heading", { name: "Welcome back" })).toBeInTheDocument();
-    expect(authClient.signIn.email).not.toHaveBeenCalled();
+    expect(workspaceGateway.signIn).not.toHaveBeenCalled();
   });
 
   it("shows a generic sign-up failure without leaving the account form", async () => {
-    vi.mocked(authClient.signUp.email).mockResolvedValue({
+    vi.mocked(workspaceGateway.signUp).mockResolvedValue({
       error: { message: "An account already exists for that email." },
     } as never);
 
@@ -117,7 +117,7 @@ describe("App", () => {
   });
 
   it("does not disclose an existing account after generic registration", async () => {
-    vi.mocked(authClient.signUp.email).mockResolvedValue({ data: {} } as never);
+    vi.mocked(workspaceGateway.signUp).mockResolvedValue({ data: {} } as never);
 
     render(<App />);
 
@@ -125,26 +125,26 @@ describe("App", () => {
 
     expect(await screen.findByRole("heading", { name: "Welcome back" })).toBeInTheDocument();
     expect(screen.queryByText(/already exists/i)).not.toBeInTheDocument();
-    expect(authClient.signIn.email).not.toHaveBeenCalled();
+    expect(workspaceGateway.signIn).not.toHaveBeenCalled();
   });
 
   it("does not create a workspace after generic registration", async () => {
-    vi.mocked(authClient.signUp.email).mockResolvedValue({ data: {} } as never);
+    vi.mocked(workspaceGateway.signUp).mockResolvedValue({ data: {} } as never);
 
     render(<App />);
 
     await submitSignUpForm();
 
     expect(await screen.findByRole("heading", { name: "Welcome back" })).toBeInTheDocument();
-    expect(authClient.organization.create).not.toHaveBeenCalled();
+    expect(workspaceGateway.createWorkspace).not.toHaveBeenCalled();
   });
 
   it("keeps an authenticated user in onboarding when workspace creation throws", async () => {
-    vi.mocked(authClient.getSession).mockResolvedValue({
+    vi.mocked(workspaceGateway.getSession).mockResolvedValue({
       data: { user: { id: "member-1" } },
     } as never);
-    vi.mocked(authClient.organization.list).mockResolvedValue({ data: [] } as never);
-    vi.mocked(authClient.organization.create).mockRejectedValue(new Error("Network unavailable"));
+    vi.mocked(workspaceGateway.listWorkspaces).mockResolvedValue({ data: [] } as never);
+    vi.mocked(workspaceGateway.createWorkspace).mockRejectedValue(new Error("Network unavailable"));
 
     render(<App />);
 
@@ -153,24 +153,22 @@ describe("App", () => {
     fireEvent.change(screen.getByLabelText("Workspace handle"), { target: { value: "ada" } });
     fireEvent.submit(getForm("Create workspace"));
 
-    expect(
-      await screen.findByRole("heading", { name: "Create your workspace" }),
-    ).toBeInTheDocument();
-    expect(screen.getByRole("alert")).toHaveTextContent(
+    expect(await screen.findByRole("alert")).toHaveTextContent(
       "We couldn't create your workspace. Please try again.",
     );
+    expect(screen.getByRole("heading", { name: "Create your workspace" })).toBeInTheDocument();
     expect(screen.queryByLabelText("Your name")).not.toBeInTheDocument();
   });
 
   it("signs in a returning workspace member", async () => {
-    vi.mocked(authClient.getSession)
+    vi.mocked(workspaceGateway.getSession)
       .mockResolvedValueOnce({ data: null } as never)
       .mockResolvedValue({ data: { user: { id: "member-1" } } } as never);
-    vi.mocked(authClient.signIn.email).mockResolvedValue({ data: {} } as never);
-    vi.mocked(authClient.organization.list).mockResolvedValue({
+    vi.mocked(workspaceGateway.signIn).mockResolvedValue({ data: {} } as never);
+    vi.mocked(workspaceGateway.listWorkspaces).mockResolvedValue({
       data: [{ id: "workspace-1", name: "Ada Studio", slug: "ada" }],
     } as never);
-    vi.mocked(authClient.organization.getFullOrganization).mockResolvedValue({
+    vi.mocked(workspaceGateway.getWorkspace).mockResolvedValue({
       data: { members: [{ role: "editor", userId: "member-1" }] },
     } as never);
 
@@ -187,7 +185,7 @@ describe("App", () => {
   });
 
   it("keeps the sign-in form visible when authentication fails", async () => {
-    vi.mocked(authClient.signIn.email).mockResolvedValue({
+    vi.mocked(workspaceGateway.signIn).mockResolvedValue({
       error: { message: "Invalid email or password." },
     } as never);
 
@@ -205,10 +203,10 @@ describe("App", () => {
   });
 
   it("shows a retry state when workspace loading fails", async () => {
-    vi.mocked(authClient.getSession).mockResolvedValue({
+    vi.mocked(workspaceGateway.getSession).mockResolvedValue({
       data: { user: { id: "member-1" } },
     } as never);
-    vi.mocked(authClient.organization.list).mockResolvedValue({
+    vi.mocked(workspaceGateway.listWorkspaces).mockResolvedValue({
       data: null,
       error: { message: "Service unavailable" },
     } as never);
@@ -222,7 +220,7 @@ describe("App", () => {
   });
 
   it("shows a retry state when session loading returns an error", async () => {
-    vi.mocked(authClient.getSession).mockResolvedValue({
+    vi.mocked(workspaceGateway.getSession).mockResolvedValue({
       data: null,
       error: { message: "Service unavailable" },
     } as never);
@@ -235,7 +233,7 @@ describe("App", () => {
   });
 
   it("clears an account error when moving to sign in", async () => {
-    vi.mocked(authClient.signUp.email).mockResolvedValue({
+    vi.mocked(workspaceGateway.signUp).mockResolvedValue({
       error: { message: "Registration failed." },
     } as never);
 
@@ -246,6 +244,43 @@ describe("App", () => {
 
     expect(screen.getByRole("heading", { name: "Welcome back" })).toBeInTheDocument();
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("lets an owner publish a destination without choosing the CUID slug", async () => {
+    vi.mocked(workspaceGateway.getSession).mockResolvedValue({
+      data: { user: { id: "member-1" } },
+    } as never);
+    vi.mocked(workspaceGateway.listWorkspaces).mockResolvedValue({
+      data: [{ id: "workspace-1", name: "Ada Studio", slug: "ada" }],
+    } as never);
+    vi.mocked(workspaceGateway.getWorkspace).mockResolvedValue({
+      data: { members: [{ role: "owner", userId: "member-1" }] },
+    } as never);
+    vi.mocked(linkGateway.publish).mockResolvedValue({
+      data: {
+        createdAt: "2026-08-21T12:00:00.000Z",
+        destinationUrl: "https://example.com/portfolio",
+        id: "link-1",
+        organizationId: "workspace-1",
+        publishedAt: "2026-08-21T12:00:00.000Z",
+        slug: "cmfoo123",
+      },
+    });
+
+    render(<App />);
+
+    await screen.findByRole("heading", { name: "Ada Studio" });
+    fireEvent.change(screen.getByLabelText("Destination URL"), {
+      target: { value: "https://example.com/portfolio" },
+    });
+    fireEvent.submit(getForm("Publish link"));
+
+    expect(await screen.findByText("ada/cmfoo123")).toBeInTheDocument();
+    expect(linkGateway.publish).toHaveBeenCalledWith({
+      destinationUrl: "https://example.com/portfolio",
+      organizationId: "workspace-1",
+    });
+    expect(screen.queryByLabelText(/slug/i)).not.toBeInTheDocument();
   });
 });
 

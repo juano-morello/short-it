@@ -243,6 +243,12 @@ a:focus-visible {
   text-transform: uppercase;
 }
 
+.published-link {
+  margin-top: var(--space-6);
+  font-family: var(--font-mono);
+  font-size: var(--text-mono-sm);
+}
+
 @media (max-width: 700px) {
   .environment {
     display: none;

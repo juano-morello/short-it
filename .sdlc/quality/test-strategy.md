@@ -4,7 +4,8 @@
 
 Core product slices use executable Gherkin. The scaffold begins with the health-probe feature.
 WORK-002 covers registration, workspace ownership, safe handle creation, and isolated rate-limit
-behavior. Future slices cover link creation, redirect-first behavior, analytics, and deletion
+behavior. WORK-003 covers server-generated CUID link publication, destination safety, and
+tenant-scoped authorization. Future slices cover redirect-first behavior, analytics, and deletion
 lifecycle.
 
 ## Outside-in TDD workflow
