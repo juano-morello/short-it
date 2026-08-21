@@ -4,7 +4,7 @@
 
 | ID | Requirement | Acceptance evidence | Status |
 |---|---|---|---|
-| FR-001 | Anyone can self-register and create a workspace. | Browser BDD scenario and Better Auth organization integration. | planned |
+| FR-001 | Anyone can self-register and create a workspace. | Browser scenario and Better Auth organization BDD integration. | ready for review |
 | FR-002 | A workspace owner can invite editor and analyst members using a copyable invitation link. | Role and invitation BDD scenarios. | planned |
 | FR-003 | A workspace can create a custom-slug HTTP or HTTPS link. | API contract, validation, and browser scenario. | planned |
 | FR-004 | A public workspace host resolves a slug and redirects to its immutable destination. | Redirect integration and resilience tests. | planned |

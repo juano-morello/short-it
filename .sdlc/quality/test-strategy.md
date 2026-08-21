@@ -3,8 +3,9 @@
 ## Behavior and BDD
 
 Core product slices use executable Gherkin. The scaffold begins with the health-probe feature.
-Upcoming features cover registration, workspace roles, safe link creation, redirect-first
-behavior, analytics, and deletion lifecycle.
+WORK-002 covers registration, workspace ownership, safe handle creation, and isolated rate-limit
+behavior. Future slices cover link creation, redirect-first behavior, analytics, and deletion
+lifecycle.
 
 ## Outside-in TDD workflow
 
@@ -14,7 +15,9 @@ minimum behavior, then add focused unit tests for policy and transformation edge
 ## Unit tests
 
 Vitest covers controllers, destination policy, aggregation, role policy, and UI components.
-The scaffold includes a health controller and dashboard metric-card test.
+The scaffold includes a health controller and dashboard metric-card test. WORK-002 adds
+session-aware onboarding, sign-in, account-error, and workspace-retry UI coverage. Its rate-limit
+scenario runs alone against a fresh Compose stack because its counter is intentionally process-local.
 
 ## Integration and contract tests
 
@@ -24,9 +27,9 @@ drift.
 
 ## E2E and visual regression
 
-Playwright owns browser flows. The current scaffold validates the Playwright discovery
-contract; the first self-service slice must replace the skipped placeholder with a real
-browser scenario. Storybook documents dashboard components and supports future visual checks.
+Playwright owns browser flows. WORK-002 adds a real browser scenario that registers an account,
+signs in, creates a workspace, and verifies the owner dashboard. Storybook documents dashboard
+components and supports future visual checks.
 
 ## Test data and isolation
 
@@ -37,7 +40,7 @@ emails, countries, and referrer hosts only.
 
 The target is at least 80 percent line coverage for product code. Coverage exclusions require
 a recorded review. Generated Prisma artifacts are excluded. The initial coverage gate excludes
-composition-root, environment, database-client, and auth-provider wiring; those boundaries are
+composition-root, environment, database-client, and auth-provider composition root; those boundaries are
 instead verified through the live Compose migration, probe, signup, and browser smoke checks.
 
 ## Performance and resilience
@@ -48,7 +51,7 @@ enrichment fail. Load and latency targets are deferred until hosting is selected
 ## CI gates and exact commands
 
 Run `pnpm format:check`, `pnpm lint`, `pnpm typecheck`, `pnpm test`,
-`pnpm test:integration`, `pnpm bdd`, `pnpm e2e`, `pnpm coverage`,
+`pnpm test:integration`, `pnpm bdd`, `pnpm bdd:rate-limit`, `pnpm e2e`, `pnpm coverage`,
 `pnpm db:validate`, `pnpm storybook:build`, `pnpm compose:config`,
 `pnpm docker:build`, and `pnpm security`.
 

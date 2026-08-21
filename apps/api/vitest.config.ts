@@ -11,7 +11,7 @@ export default defineConfig({
         "src/app.module.ts",
         "src/config.ts",
         "src/database.ts",
-        "src/auth/**",
+        "src/auth/auth.ts",
         "src/**/*.spec.ts",
         "src/**/*.integration.spec.ts",
       ],
