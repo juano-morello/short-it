@@ -30,6 +30,27 @@ button:active {
   box-shadow: var(--shadow-none);
 }
 
+button:disabled {
+  cursor: wait;
+  opacity: 0.7;
+}
+
+.text-button {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-foreground);
+  box-shadow: none;
+  text-decoration: underline;
+}
+
+.text-button:hover,
+.text-button:active {
+  background: transparent;
+  box-shadow: none;
+  transform: none;
+}
+
 .site-shell {
   width: min(100%, var(--layout-max));
   margin: 0 auto;
@@ -148,6 +169,78 @@ mark {
 
 .build-note > p:last-child {
   margin-top: var(--space-5);
+}
+
+.auth-shell {
+  min-height: 100vh;
+}
+
+.auth-panel {
+  width: min(100%, 38rem);
+  padding: var(--space-18) 0;
+}
+
+.auth-panel h1 {
+  margin-top: var(--space-4);
+  font-family: var(--font-display);
+  font-size: var(--text-display-fluid);
+  font-weight: var(--weight-extrabold);
+  line-height: var(--leading-display);
+  letter-spacing: var(--tracking-display);
+}
+
+.auth-form {
+  display: grid;
+  gap: var(--space-5);
+  margin-top: var(--space-8);
+}
+
+.field {
+  display: grid;
+  gap: var(--space-2);
+  font-family: var(--font-mono);
+  font-size: var(--text-mono-sm);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-mono-ui);
+  text-transform: uppercase;
+}
+
+.field input {
+  min-height: var(--control-height);
+  padding: var(--control-pad-y) var(--control-pad-x);
+  border: var(--border-width) solid var(--color-border-strong);
+  border-radius: var(--radius-none);
+  background: var(--color-surface);
+  color: var(--color-foreground);
+  font: inherit;
+  text-transform: none;
+}
+
+.field input:focus-visible,
+button:focus-visible,
+a:focus-visible {
+  outline: 3px solid var(--color-accent);
+  outline-offset: 3px;
+}
+
+.form-error {
+  margin: 0;
+  padding: var(--space-4);
+  border: var(--border-width) solid var(--color-border-strong);
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+}
+
+.role-chip {
+  display: inline-block;
+  margin-top: var(--space-7);
+  padding: var(--space-2) var(--space-3);
+  border: var(--border-width) solid var(--color-border-strong);
+  font-family: var(--font-mono);
+  font-size: var(--text-mono-xs);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-mono-xs);
+  text-transform: uppercase;
 }
 
 @media (max-width: 700px) {
