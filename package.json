@@ -1,0 +1,34 @@
+{
+  "name": "short-it",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@11.20.0",
+  "engines": {
+    "node": ">=24.19.0 <25",
+    "pnpm": ">=11.20.0 <12"
+  },
+  "scripts": {
+    "build": "turbo build",
+    "dev": "turbo dev --parallel",
+    "test": "turbo test",
+    "test:integration": "turbo test:integration",
+    "bdd": "turbo bdd",
+    "e2e": "turbo e2e",
+    "coverage": "turbo coverage",
+    "typecheck": "turbo typecheck",
+    "lint": "biome check .",
+    "format": "biome format --write .",
+    "format:check": "biome format .",
+    "db:generate": "pnpm --filter @short-it/api prisma:generate",
+    "db:validate": "pnpm --filter @short-it/api prisma:validate",
+    "storybook:build": "pnpm --filter @short-it/web storybook:build",
+    "security": "pnpm audit --prod && pnpm audit",
+    "docker:build": "docker compose build",
+    "compose:config": "docker compose config"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.10",
+    "turbo": "2.10.11",
+    "typescript": "5.9.3"
+  }
+}

@@ -1,0 +1,19 @@
+:8080 {
+  @dashboard host app.localhost
+
+  handle @dashboard {
+    handle /api/* {
+      reverse_proxy api:3000
+    }
+
+    handle {
+      reverse_proxy web:5173
+    }
+  }
+
+  # Tenant hosts are redirect-only. Until public slug resolution ships, reject
+  # every request rather than exposing dashboard or authentication routes.
+  handle {
+    respond "Not found" 404
+  }
+}

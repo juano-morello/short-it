@@ -1,0 +1,10 @@
+:root {
+  --duration-fast: 120ms;
+  --duration: 180ms;
+  --duration-slow: 260ms;
+  --ease: ease;
+  --ease-out: cubic-bezier(0.2, 0, 0, 1);
+  --transition-control:
+    transform var(--duration-fast) var(--ease), box-shadow var(--duration-fast) var(--ease),
+    background var(--duration-fast) var(--ease), color var(--duration-fast) var(--ease);
+}

@@ -1,0 +1,43 @@
+name: Quality
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.20.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.19.0
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm db:generate
+      - run: docker compose up -d --build
+      - run: pnpm format:check
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm test:integration
+      - run: BDD_BASE_URL=http://app.localhost:8080 pnpm bdd
+      - run: pnpm e2e
+      - run: pnpm coverage
+      - run: pnpm db:validate
+      - run: pnpm storybook:build
+      - run: pnpm compose:config
+      - run: pnpm docker:build
+      - run: pnpm security
+      - if: always()
+        run: docker compose down --volumes

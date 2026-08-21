@@ -1,0 +1,16 @@
+:root {
+  --radius: 0px;
+  --radius-none: 0px;
+  --border-width: 1px;
+  --border-width-strong: 1.5px;
+  --border-width-focus: 2px;
+  --shadow-hard-sm: 3px 3px 0 0 var(--color-shadow-hard);
+  --shadow-hard-btn: 4px 4px 0 0 var(--color-shadow-hard);
+  --shadow-hard: 5px 5px 0 0 var(--color-shadow-hard);
+  --shadow-hard-lg: 8px 8px 0 0 var(--color-shadow-hard);
+  --shadow-none: 0 0 0 0 var(--color-shadow-hard);
+  --lift: 2px;
+  --press: 3px;
+  --highlight-pad: 0.02em 0.14em;
+  --highlight-pad-text: 0 0.1em;
+}

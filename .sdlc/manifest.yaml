@@ -1,0 +1,47 @@
+schema_version: "1.0"
+workflow_version: "0.1.0"
+managed: true
+project:
+  name: "short.it"
+  repository: "juano-morello/short-it"
+  default_branch: "main"
+  type: "public self-service link shortener"
+ownership:
+  product_decision_owner: "Juano Morello"
+workflow:
+  branching: "trunk-based"
+  worktrees_required: true
+  bdd: "approved"
+  coverage_default_percent: 80
+  merge_monitoring: true
+commands:
+  setup: ["pnpm install --frozen-lockfile", "pnpm db:generate"]
+  dev: ["pnpm dev", "docker compose up --build"]
+  unit: ["pnpm test"]
+  integration: ["pnpm test:integration"]
+  e2e: ["pnpm e2e"]
+  bdd: ["pnpm bdd"]
+  coverage: ["pnpm coverage"]
+  typecheck: ["pnpm typecheck"]
+  lint: ["pnpm lint"]
+  format_check: ["pnpm format:check"]
+  build: ["pnpm build", "pnpm storybook:build", "pnpm docker:build"]
+  security: ["pnpm security"]
+  compose_health: ["pnpm compose:config"]
+quality_gates:
+  - "format, lint, and type checks"
+  - "unit, integration, BDD, browser harness, and 80 percent coverage"
+  - "Prisma schema validation"
+  - "Storybook and Docker builds"
+  - "Compose configuration validation"
+  - "production and full dependency audit"
+approved_overrides:
+  - "Production deployment, domain, database provider, and image registry are deferred."
+  - "No email verification or delivery integration in the initial product scope."
+documents:
+  product_brief: ".sdlc/project/product-brief.md"
+  requirements: ".sdlc/project/requirements.md"
+  architecture: ".sdlc/architecture/overview.md"
+  test_strategy: ".sdlc/quality/test-strategy.md"
+  threat_model: ".sdlc/quality/threat-model.md"
+  operations: ".sdlc/architecture/operations.md"

@@ -1,0 +1,20 @@
+{
+  "name": "@short-it/e2e",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node -e \"process.exit(0)\"",
+    "typecheck": "node -e \"process.exit(0)\"",
+    "test": "playwright test",
+    "test:integration": "playwright test",
+    "bdd": "node -e \"process.exit(0)\"",
+    "e2e": "playwright test",
+    "coverage": "node -e \"process.exit(0)\""
+  },
+  "devDependencies": {
+    "@playwright/test": "1.62.1",
+    "@types/node": "26.2.0",
+    "typescript": "5.9.3"
+  }
+}

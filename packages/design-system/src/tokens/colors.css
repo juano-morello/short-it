@@ -1,0 +1,49 @@
+:root {
+  --color-paper: #f6f1e5;
+  --color-paper-raised: #fcf9f1;
+  --color-paper-inset: #eee7d6;
+  --color-ink: #191510;
+  --color-ink-raised: #1f1b15;
+  --color-ink-inset: #100e0b;
+  --color-cream: #f2ecdd;
+  --color-lime: #c8f226;
+  --color-lime-bright: #cdf63b;
+  --color-lime-press: #b4de13;
+  --color-warm-gray: #6e6553;
+  --color-warm-gray-dark: #a79d86;
+  --color-line: #d9d0bb;
+  --color-line-dark: #3b3527;
+  --color-error: #e0472a;
+  --color-error-dark: #ff6b4a;
+  --color-background: var(--color-paper);
+  --color-surface: var(--color-paper-raised);
+  --color-surface-inset: var(--color-paper-inset);
+  --color-foreground: var(--color-ink);
+  --color-muted: var(--color-warm-gray);
+  --color-border: var(--color-line);
+  --color-border-strong: var(--color-ink);
+  --color-accent: var(--color-lime);
+  --color-accent-press: var(--color-lime-press);
+  --color-on-accent: var(--color-ink);
+  --color-danger: var(--color-error);
+  --color-shadow-hard: var(--color-ink);
+  --color-code-background: var(--color-ink);
+  --color-code-foreground: var(--color-cream);
+  --color-code-token: var(--color-lime-bright);
+  --color-code-comment: var(--color-warm-gray-dark);
+}
+
+.dark {
+  --color-background: var(--color-ink);
+  --color-surface: var(--color-ink-raised);
+  --color-surface-inset: var(--color-ink-inset);
+  --color-foreground: var(--color-cream);
+  --color-muted: var(--color-warm-gray-dark);
+  --color-border: var(--color-line-dark);
+  --color-border-strong: var(--color-cream);
+  --color-accent: var(--color-lime-bright);
+  --color-accent-press: var(--color-lime);
+  --color-on-accent: var(--color-ink);
+  --color-danger: var(--color-error-dark);
+  --color-shadow-hard: var(--color-lime-bright);
+}
