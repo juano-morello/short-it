@@ -43,3 +43,15 @@ Feature: Workspace link publication
     Then the link publication is rejected with "Link destinations must not resolve privately."
     When the owner publishes a link to "https://internal.local/private"
     Then the link publication is rejected with "Link destinations must not resolve privately."
+
+  @publication-guardrails
+  Scenario: Oversized destinations are rejected before publishing
+    Given a signed-in workspace owner
+    When the owner publishes a destination longer than 2,048 characters
+    Then the link publication is rejected with "Link destinations must be 2,048 characters or fewer."
+
+  @publication-guardrails
+  Scenario: An owner may make only 30 publication attempts per workspace in ten minutes
+    Given a signed-in workspace owner
+    When the owner makes 31 link publication attempts
+    Then the link publication is rejected as rate limited

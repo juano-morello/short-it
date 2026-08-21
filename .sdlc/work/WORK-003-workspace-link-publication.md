@@ -79,6 +79,10 @@ Juano approved immediate publication and server-generated CUID slugs on 2026-08-
 are deferred to v1.1 and excluded from launch scope. This work adds the internal `POST /api/links`
 contract but does not expose a third-party API.
 
+Juano also approved launch guardrails on 2026-08-21: an authorized member may make 30 publication
+attempts for a workspace in ten minutes, each workspace may hold 1,000 published links, and a
+destination URL may contain at most 2,048 characters.
+
 ## Risks and dependencies
 
 DNS answers can change after a link is created. WORK-004 must resolve and revalidate the
@@ -86,7 +90,10 @@ destination on the redirect path. Publication bounds DNS resolution to ten concu
 two seconds, returning a retryable 503 for transient resolver failures. It logs a request ID,
 outcome, and latency without recording a hostname or destination. Local acceptance tests use a
 public IP literal where external DNS is unavailable; unit tests cover hostname resolution through an
-injected resolver.
+injected resolver. The publication attempt window and quota check/write coordination use
+in-memory state in the single-instance demo; the published-link count is durable PostgreSQL state.
+A production multi-instance deployment must replace the process-local controls with equivalent
+shared limiter and quota coordination.
 
 ## TDD and BDD strategy
 
@@ -105,7 +112,10 @@ must remain at least 80 percent.
 The browser does not authorize workspace access. The API derives the write scope from a session and
 membership record. No raw IP address, user-agent, session value, or destination query string is
 stored or logged. The service makes DNS availability part of publication validation. Redirect
-availability and redirect-time revalidation remain work for WORK-004.
+availability and redirect-time revalidation remain work for WORK-004. The service rejects the
+31st authorized publication attempt in a ten-minute member/workspace window, rejects a workspace's
+1,001st link, and rejects destination URLs longer than 2,048 characters before resolving or
+persisting them.
 
 ## Migration and rollback
 

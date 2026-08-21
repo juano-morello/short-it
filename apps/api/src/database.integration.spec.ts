@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { ForbiddenException } from "@nestjs/common";
+import { ConflictException, ForbiddenException } from "@nestjs/common";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from "@testcontainers/postgresql";
@@ -114,19 +114,68 @@ describe("PostgreSQL integration", () => {
     const before = await testPrisma.link.count();
 
     await expect(
-      new LinksService().create(
-        {
-          destinationUrl: "https://example.com/portfolio",
-          requestedOrganizationId: "workspace-other",
-          userId: "cross-tenant-editor",
-        },
-        testPrisma as never,
-        async () => "https://example.com/portfolio",
-      ),
+      LinksService.forTesting({
+        database: testPrisma as never,
+        validateDestination: async () => "https://example.com/portfolio",
+      }).create({
+        destinationUrl: "https://example.com/portfolio",
+        requestedOrganizationId: "workspace-other",
+        userId: "cross-tenant-editor",
+      }),
     ).rejects.toEqual(
       new ForbiddenException("You do not have permission to publish links in this workspace."),
     );
 
     await expect(testPrisma.link.count()).resolves.toBe(before);
+  });
+
+  it("does not publish more than 1,000 links for one workspace", async () => {
+    await testPrisma.user.create({
+      data: {
+        id: "quota-owner",
+        email: "quota-owner@example.test",
+        name: "Quota Owner",
+      },
+    });
+    await testPrisma.organization.create({
+      data: {
+        id: "workspace-quota",
+        name: "Quota Workspace",
+        slug: "workspace-quota",
+      },
+    });
+    await testPrisma.member.create({
+      data: {
+        id: "workspace-quota-owner",
+        organizationId: "workspace-quota",
+        role: "owner",
+        userId: "quota-owner",
+      },
+    });
+    await testPrisma.link.createMany({
+      data: Array.from({ length: 1_000 }, () => ({
+        destinationUrl: "https://example.com/portfolio",
+        organizationId: "workspace-quota",
+        publishedAt: new Date(),
+      })),
+    });
+
+    await expect(
+      LinksService.forTesting({
+        database: testPrisma as never,
+        validateDestination: async () => "https://example.com/next-link",
+      }).create({
+        destinationUrl: "https://example.com/next-link",
+        requestedOrganizationId: "workspace-quota",
+        userId: "quota-owner",
+      }),
+    ).rejects.toEqual(
+      new ConflictException("This workspace has reached its 1,000 published link limit."),
+    );
+    await expect(
+      testPrisma.link.count({
+        where: { organizationId: "workspace-quota", publishedAt: { not: null } },
+      }),
+    ).resolves.toBe(1_000);
   });
 });

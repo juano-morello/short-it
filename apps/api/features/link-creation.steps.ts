@@ -53,6 +53,30 @@ When("the owner publishes a link to {string}", async (destinationUrl: string) =>
   );
 });
 
+When("the owner publishes a destination longer than 2,048 characters", async () => {
+  assert.ok(workspaceOwner, "A signed-in workspace owner is required.");
+  publishedLinkResponse = await publish(
+    {
+      destinationUrl: `https://93.184.216.34/${"a".repeat(2_048)}`,
+      organizationId: workspaceOwner.workspaceId,
+    },
+    workspaceOwner.cookie,
+  );
+});
+
+When("the owner makes 31 link publication attempts", async () => {
+  assert.ok(workspaceOwner, "A signed-in workspace owner is required.");
+  for (let attempt = 0; attempt < 31; attempt += 1) {
+    publishedLinkResponse = await publish(
+      {
+        destinationUrl: "https://93.184.216.34/rate-limit",
+        organizationId: workspaceOwner.workspaceId,
+      },
+      workspaceOwner.cookie,
+    );
+  }
+});
+
 When("the editor publishes a link to {string}", async (destinationUrl: string) => {
   assert.ok(workspaceMember, "A signed-in workspace editor is required.");
   publishedLinkResponse = await publish(
@@ -127,6 +151,13 @@ Then("the link publication is rejected as forbidden", () => {
 Then("the link publication is rejected as cross-origin", () => {
   assert.ok(publishedLinkResponse, "A link publication response is required.");
   assert.equal(publishedLinkResponse.status, 403);
+});
+
+Then("the link publication is rejected as rate limited", async () => {
+  assert.ok(publishedLinkResponse, "A link publication response is required.");
+  assert.equal(publishedLinkResponse.status, 429);
+  const response = (await publishedLinkResponse.json()) as { message?: string };
+  assert.equal(response.message, "Too many link publication attempts. Please try again later.");
 });
 
 Then("the link publication is rejected with {string}", async (message: string) => {

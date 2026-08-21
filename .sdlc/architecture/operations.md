@@ -48,8 +48,11 @@ selection and are deferred.
 ## Capacity and cost
 
 No provider or paid resource is provisioned. The demo runs Better Auth's in-memory limiter, so
-each API process maintains its own counters. Quotas and shared limiter storage must be revisited
-with usage evidence before running more than one API instance.
+each API process maintains its own counters. Link publication also keeps its approved 30-attempt
+member/workspace window and quota check/write coordination in process; its published-link count is
+durable PostgreSQL state. The service serializes quota checks and writes for each workspace, but
+that coordination applies only to one API process. Shared limiter and quota coordination must be
+in place before running more than one API instance.
 
 ## Migrations and rollback
 

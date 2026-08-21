@@ -54,7 +54,8 @@ enrichment fail. Load and latency targets are deferred until hosting is selected
 ## CI gates and exact commands
 
 Run `pnpm format:check`, `pnpm lint`, `pnpm typecheck`, `pnpm test`,
-`pnpm test:integration`, `pnpm bdd`, `pnpm bdd:rate-limit`, `pnpm e2e`, `pnpm coverage`,
+`pnpm test:integration`, `pnpm bdd`, `pnpm bdd:publication-guardrails`, `pnpm bdd:rate-limit`,
+`pnpm e2e`, `pnpm coverage`,
 `pnpm db:validate`, `pnpm storybook:build`, `pnpm compose:config`,
 `pnpm docker:build`, and `pnpm security`.
 
