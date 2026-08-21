@@ -50,22 +50,28 @@ immutable action pins before production use.
 
 ## Network, filesystem, and infrastructure risk
 
-The edge rejects request bodies larger than 64 KiB on `/api/*`. Only HTTP and HTTPS destinations
-are permitted. Release work must resolve DNS and reject
-loopback, private, link-local, carrier-grade NAT, and metadata-service addresses after
-resolution, with redirect revalidation to reduce DNS rebinding risk. Containers run on an
-isolated Compose network; production runtime must be non-root and use managed backups.
+The edge rejects request bodies larger than 64 KiB on `/api/*`. Tenant hosts route only `GET` and
+`HEAD` CUID paths to the redirect API and return 404 for dashboard, auth, API, health, nested-path,
+and unsupported-method requests. The API independently derives the workspace from the direct Host
+header, rejects forwarded-host authority, and scopes the link lookup by organization ID and slug.
+Only HTTP and HTTPS destinations are permitted. Redirects resolve DNS immediately before response
+and reject loopback, private, link-local, carrier-grade NAT, and metadata-service addresses. A
+resolver failure or resolver-capacity exhaustion returns retryable 503. This reduces, but cannot
+eliminate, browser-side DNS rebinding risk. Containers run on an isolated Compose network;
+production runtime must be non-root and use managed backups.
 
 ## Mitigations and verification
 
-Destination policy, permission policy, publication limits, and cross-tenant queries receive unit
-and integration tests. Live acceptance tests verify authentication throttling, link-publication
-throttling, absent session IP and user-agent fields, and the edge request-size limit. Browser tests
-verify role-limited UI. Redirect resilience tests prove analytics cannot block a destination.
+Destination policy, public-host policy, permission policy, publication limits, and cross-tenant
+queries receive unit and integration tests. Live acceptance tests verify authentication throttling,
+link-publication throttling, public redirect isolation, redirect headers, and the edge request-size
+limit. Browser tests verify role-limited UI and absence of dashboard cookies on tenant-host
+navigation. Redirect tests cover fresh DNS validation, resolver capacity, and generic 404 outcomes.
 Security review is required before each release.
 
 ## Residual risks and owners
 
-Distributed bot abuse and invitation forwarding remain accepted demo-scope risks owned by
-Juano. Production hardening requires CAPTCHA or equivalent controls, provider WAF/rate limits,
-email delivery, backup restore evidence, image scanning, and PostgreSQL RLS evaluation.
+Distributed bot abuse, public redirect database admission, and invitation forwarding remain
+accepted demo-scope risks owned by Juano. Production hardening requires CAPTCHA or equivalent
+controls, provider WAF or redirect-admission limits, email delivery, backup restore evidence, image
+scanning, and PostgreSQL RLS evaluation.

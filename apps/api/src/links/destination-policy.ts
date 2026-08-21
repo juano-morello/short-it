@@ -3,6 +3,7 @@ import { isIP } from "node:net";
 import { BadRequestException, Logger, ServiceUnavailableException } from "@nestjs/common";
 
 type AddressResolver = (hostname: string) => Promise<Array<{ address: string }>>;
+type AddressFamilyResolver = (hostname: string) => Promise<string[]>;
 type IpRange = readonly [network: string, prefixLength: number];
 
 const resolutionLogger = new Logger("DestinationPolicy");
@@ -54,22 +55,32 @@ const defaultAddressResolver: AddressResolver = async (hostname) => {
     return [{ address: normalizedHostname }];
   }
 
-  const results = await Promise.allSettled([
-    resolve4(normalizedHostname),
-    resolve6(normalizedHostname),
-  ]);
+  return resolvePublicDnsAddresses(normalizedHostname);
+};
+
+export async function resolvePublicDnsAddresses(
+  hostname: string,
+  resolveIpv4: AddressFamilyResolver = resolve4,
+  resolveIpv6: AddressFamilyResolver = resolve6,
+): Promise<Array<{ address: string }>> {
+  const results = await Promise.allSettled([resolveIpv4(hostname), resolveIpv6(hostname)]);
+  const failures = results.filter(
+    (result): result is PromiseRejectedResult => result.status === "rejected",
+  );
+  const resolverFailure = failures.find(
+    (failure) => !isDefinitiveAddressFamilyAbsence(failure.reason),
+  );
+  if (resolverFailure) {
+    throw resolverFailure.reason;
+  }
   const addresses = results.flatMap((result) =>
     result.status === "fulfilled" ? result.value.map((address) => ({ address })) : [],
   );
   if (addresses.length) {
     return addresses;
   }
-  const failures = results.filter(
-    (result): result is PromiseRejectedResult => result.status === "rejected",
-  );
-  const transientFailure = failures.find((failure) => isTransientResolutionError(failure.reason));
-  throw transientFailure?.reason ?? failures[0]?.reason ?? new Error("DNS resolution failed.");
-};
+  throw failures[0]?.reason ?? new Error("DNS resolution failed.");
+}
 
 export async function assertSafeDestinationUrl(
   value: unknown,
@@ -82,8 +93,9 @@ export async function assertSafeDestinationUrl(
 export async function assertSafeRedirectDestinationUrl(
   value: unknown,
   resolveAddresses: AddressResolver = defaultAddressResolver,
+  requestId?: string,
 ): Promise<string> {
-  return assertSafeUrl(value, resolveAddresses, undefined, redirectResolutionPool);
+  return assertSafeUrl(value, resolveAddresses, requestId, redirectResolutionPool);
 }
 
 async function assertSafeUrl(
@@ -211,7 +223,22 @@ function isTransientResolutionError(error: unknown): boolean {
     typeof error === "object" &&
     error !== null &&
     "code" in error &&
-    (error.code === "EAI_AGAIN" || error.code === "ETIMEOUT")
+    (error.code === "EAI_AGAIN" ||
+      error.code === "ECONNREFUSED" ||
+      error.code === "ECONNRESET" ||
+      error.code === "EHOSTUNREACH" ||
+      error.code === "ENETUNREACH" ||
+      error.code === "ESERVFAIL" ||
+      error.code === "ETIMEOUT")
+  );
+}
+
+function isDefinitiveAddressFamilyAbsence(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    (error.code === "ENODATA" || error.code === "ENOTFOUND")
   );
 }
 

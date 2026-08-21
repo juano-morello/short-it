@@ -92,17 +92,20 @@ cannot prevent a visitor resolver from receiving a different answer. Manual abus
 ## Risks and dependencies
 
 Public redirect traffic is unauthenticated, so its resolver capacity must not consume the
-publication budget. PostgreSQL remains the availability dependency for redirect lookup. No schema
-migration is expected because the existing organization slug and composite link key support the
-query. Caddy host routing and API host validation must ship together; rollback restores the current
-tenant-host 404 behavior without changing published rows.
+publication budget. PostgreSQL remains the availability dependency for redirect lookup. The launch
+slice does not apply a redirect database-admission guard, so public production requires an edge or
+WAF admission policy, or a shared redirect limiter. No schema migration is expected because the
+existing organization slug and composite link key support the query. Caddy host routing and API host
+validation must ship together; rollback restores the current tenant-host 404 behavior without
+changing published rows.
 
 ## TDD and BDD strategy
 
 Start with Caddy-level Gherkin for a manual public redirect, then add host parser, CUID parser,
-tenant-scoped lookup, resolver outcome, and response-header unit tests. Add PostgreSQL integration
-coverage for identical CUIDs across workspaces and unpublished links. Browser coverage verifies
-that a tenant-host redirect does not receive dashboard cookies.
+tenant-scoped lookup, resolver outcome, and response-header unit tests. Verify the separate DNS
+pool at its ten-request limit and preserve `Retry-After` without a `Location` header. Add PostgreSQL
+integration coverage for identical CUIDs across workspaces and unpublished links. Browser coverage
+verifies that a tenant-host navigation does not receive dashboard cookies.
 
 ## Verification plan
 

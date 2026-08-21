@@ -35,6 +35,20 @@ test("a tenant host exposes only a query-free public redirect", async ({ page })
     "referrer-policy": "no-referrer",
   });
 
+  let tenantCookieHeader: string | undefined;
+  await page.route(
+    (url) => url.hostname === `${workspaceHandle}.localhost`,
+    async (route) => {
+      tenantCookieHeader = (await route.request().headerValue("cookie")) ?? undefined;
+      await route.fulfill({ body: "<title>Tenant</title>", contentType: "text/html", status: 200 });
+    },
+  );
+  const tenantNavigation = await page.goto(
+    `http://${workspaceHandle}.localhost:8080/${slug}?cookie-proof=1`,
+  );
+  expect(tenantNavigation?.status()).toBe(200);
+  expect(tenantCookieHeader).toBeUndefined();
+
   const blockedRoute = await page.request.get(
     `http://${workspaceHandle}.localhost:8080/api/health`,
     { maxRedirects: 0 },

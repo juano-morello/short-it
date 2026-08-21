@@ -1,5 +1,5 @@
-const publicWorkspaceHandlePattern = /^(?!.*--)[a-z0-9](?:[a-z0-9-]{1,28}[a-z0-9])?$/;
-const reservedWorkspaceHandles = new Set(["api", "app", "www"]);
+import { isWorkspaceHandle } from "../auth/workspace-handle.js";
+
 const publishedLinkSlugPattern = /^c[a-z0-9]{24}$/;
 
 export function getPublicWorkspaceHandle(
@@ -16,10 +16,7 @@ export function getPublicWorkspaceHandle(
   const suffix = `.${baseDomain}`;
   if (!hostname.endsWith(suffix)) return undefined;
   const workspaceHandle = hostname.slice(0, -suffix.length);
-  if (
-    !publicWorkspaceHandlePattern.test(workspaceHandle) ||
-    reservedWorkspaceHandles.has(workspaceHandle)
-  ) {
+  if (!isWorkspaceHandle(workspaceHandle)) {
     return undefined;
   }
 

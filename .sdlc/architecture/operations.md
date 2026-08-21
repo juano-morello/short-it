@@ -19,13 +19,16 @@ leave Caddy as the public edge or replace this rule with an equivalent trusted-h
 
 The API must emit structured, privacy-safe logs with request IDs. It must not log raw IPs,
 raw user agents, session tokens, invitation URLs, or destination query strings. Product
-metrics include redirect success and failure and analytics-write failures. Link publication logs
-a request ID, DNS-resolution outcome, and latency without logging the hostname or destination.
-Treat five `unavailable` outcomes in five minutes as a resolver incident: confirm API readiness,
-compare the resolver-outcome log rate with successful publication, check the configured resolver,
-and temporarily roll back the publication API if the 503 rate persists. The demo has no metrics
-backend, dashboard, or alert. Before production, the selected observability provider must chart
-`link_destination_resolution` outcomes and latency and alert on that five-in-five-minute threshold.
+metrics include redirect success and failure and analytics-write failures. Link publication logs a
+request ID, DNS-resolution outcome, and latency. Public redirects log a request ID, outcome, status,
+and latency. Neither path logs a hostname, slug, destination, query, cookie, IP address, or user
+agent. Treat five
+`redirect_destination_resolution` `unavailable` or `capacity-exhausted` outcomes in five minutes
+as a resolver incident: confirm API readiness, compare the outcome rate with successful redirects,
+check the configured resolver, and roll back the redirect route if the 503 rate persists. The demo
+has no metrics backend, dashboard, or alert. Before production, the selected observability provider
+must chart `link_destination_resolution` and `redirect_destination_resolution` outcomes and latency
+and alert on that five-in-five-minute threshold.
 
 ## Health and readiness
 
@@ -53,6 +56,11 @@ member/workspace window and quota check/write coordination in process; its publi
 durable PostgreSQL state. The service serializes quota checks and writes for each workspace, but
 that coordination applies only to one API process. Shared limiter and quota coordination must be
 in place before running more than one API instance.
+
+Public redirects have an independent ten-request DNS validation gate with a two-second timeout.
+That gate protects outbound resolution but does not admit or rate-limit database lookups. An edge
+or WAF admission policy, or a shared redirect limiter, is required before public production traffic
+or multiple API instances.
 
 ## Migrations and rollback
 

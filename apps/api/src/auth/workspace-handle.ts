@@ -15,6 +15,14 @@ export function getWorkspaceHandleError(handle: string | undefined): string | un
   return undefined;
 }
 
+export function isWorkspaceHandle(handle: string | undefined): handle is string {
+  return (
+    typeof handle === "string" &&
+    workspaceHandlePattern.test(handle) &&
+    !reservedHandles.has(handle)
+  );
+}
+
 export function assertWorkspaceHandle(handle: string | undefined): void {
   const error = getWorkspaceHandleError(handle);
 

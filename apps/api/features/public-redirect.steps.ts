@@ -116,6 +116,7 @@ Then("a HEAD request receives the same redirect headers without a body", async (
 Then("the visitor receives a generic not found response", () => {
   assert.ok(redirectResponse, "A response is required.");
   assert.equal(redirectResponse.status, 404);
+  assert.equal(redirectResponse.headers.location, undefined);
 });
 
 async function requestPublicRedirect(

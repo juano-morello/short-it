@@ -21,9 +21,9 @@ describe("PublicRedirectService", () => {
       validateDestination,
     });
 
-    await expect(service.resolve({ host: "studio.short.it", slug })).resolves.toBe(
-      "https://public.example/portfolio",
-    );
+    await expect(
+      service.resolve({ host: "studio.short.it", requestId: "redirect-123", slug }),
+    ).resolves.toBe("https://public.example/portfolio");
     expect(database.organization.findUnique).toHaveBeenCalledWith({
       select: { id: true },
       where: { slug: "studio" },
@@ -32,7 +32,11 @@ describe("PublicRedirectService", () => {
       select: { destinationUrl: true, publishedAt: true },
       where: { organizationId_slug: { organizationId: "workspace-1", slug } },
     });
-    expect(validateDestination).toHaveBeenCalledWith("https://public.example/portfolio");
+    expect(validateDestination).toHaveBeenCalledWith(
+      "https://public.example/portfolio",
+      undefined,
+      "redirect-123",
+    );
   });
 
   it.each([

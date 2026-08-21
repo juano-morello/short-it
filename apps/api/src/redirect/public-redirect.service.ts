@@ -8,6 +8,7 @@ type RedirectDatabase = Pick<typeof prisma, "link" | "organization">;
 
 type PublicRedirectInput = {
   host: string | undefined;
+  requestId?: string;
   slug: string;
 };
 
@@ -54,7 +55,11 @@ export class PublicRedirectService {
     }
 
     try {
-      return await this.dependencies.validateDestination(link.destinationUrl);
+      return await this.dependencies.validateDestination(
+        link.destinationUrl,
+        undefined,
+        input.requestId,
+      );
     } catch (error) {
       if (error instanceof BadRequestException) {
         throw new NotFoundException();
