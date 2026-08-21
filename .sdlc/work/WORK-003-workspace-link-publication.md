@@ -4,7 +4,7 @@
 
 Source: Juano approved this work item in Codex on 2026-08-21.
 
-Status: in progress.
+Status: complete. Merged in PR #2 on 2026-08-21.
 
 ## Goal
 
