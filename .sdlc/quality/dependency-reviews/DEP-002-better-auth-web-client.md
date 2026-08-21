@@ -26,3 +26,8 @@ Adding the direct declaration changes frontend supply-chain ownership but does n
 new resolved package version. The existing lockfile version, lifecycle policy, and production and
 full dependency audits remain required. The client is restricted to same-origin requests and
 cannot grant roles or select a user ID. Approved for WORK-002.
+
+## Verification
+
+`pnpm install` reused the existing 1.7.1 resolution. The production and full dependency audits
+reported no known vulnerabilities after the change.

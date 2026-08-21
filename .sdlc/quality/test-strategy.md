@@ -14,7 +14,8 @@ minimum behavior, then add focused unit tests for policy and transformation edge
 ## Unit tests
 
 Vitest covers controllers, destination policy, aggregation, role policy, and UI components.
-The scaffold includes a health controller and dashboard metric-card test.
+The scaffold includes a health controller and dashboard metric-card test. WORK-002 adds
+session-aware onboarding, sign-in, account-error, and workspace-retry UI coverage.
 
 ## Integration and contract tests
 
@@ -24,9 +25,9 @@ drift.
 
 ## E2E and visual regression
 
-Playwright owns browser flows. The current scaffold validates the Playwright discovery
-contract; the first self-service slice must replace the skipped placeholder with a real
-browser scenario. Storybook documents dashboard components and supports future visual checks.
+Playwright owns browser flows. WORK-002 adds a real browser scenario that registers an account,
+creates a workspace, and verifies the owner dashboard. Storybook documents dashboard components
+and supports future visual checks.
 
 ## Test data and isolation
 

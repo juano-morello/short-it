@@ -37,6 +37,15 @@ jobs:
       - run: pnpm docker:build
       - run: pnpm security
       - run: docker compose up -d --build
+      - name: Wait for the local API
+        run: |
+          for attempt in {1..30}; do
+            if curl --fail --silent --show-error http://app.localhost:8080/api/ready; then
+              exit 0
+            fi
+            sleep 2
+          done
+          exit 1
       - run: BDD_BASE_URL=http://app.localhost:8080 pnpm bdd
       - run: pnpm e2e
       - if: always()
