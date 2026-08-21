@@ -22,11 +22,16 @@ user-controlled names and cannot be trusted with dashboard cookies.
 ## Authentication and authorization
 
 Better Auth email/password uses explicit trusted origins, host-only cookies, static roles,
-and its built-in in-memory rate limiter for the single-instance demo. No email verification
-or CAPTCHA is planned for the demo. New workspace and invitation quotas reduce basic abuse.
-Nest guards and Prisma scopes provide the tenant boundary. The product must never accept a
-browser-provided organization ID as proof of access. A shared rate limiter is a prerequisite
-for multi-instance production deployment.
+and its built-in in-memory rate limiter for the single-instance demo. Caddy overwrites
+`X-Real-IP` from the direct client connection, and Better Auth uses that value only while
+calculating the rate-limit key. Session hooks clear IP and user-agent values before persistence.
+Automatic sign-in after registration is disabled so duplicate registrations receive Better Auth's
+generic response. The browser signs in explicitly before creating the workspace. Sign-in and
+sign-up allow 20 attempts per 10 seconds in the public demo. No email verification or CAPTCHA is
+planned for the demo. New workspace and invitation quotas reduce basic abuse. Nest guards and
+Prisma scopes provide the tenant boundary. The product must never accept a browser-provided
+organization ID as proof of access. A shared rate limiter is a prerequisite for multi-instance
+production deployment.
 
 ## Data classification and lifecycle
 
@@ -42,7 +47,8 @@ immutable action pins before production use.
 
 ## Network, filesystem, and infrastructure risk
 
-Only HTTP and HTTPS destinations are permitted. Release work must resolve DNS and reject
+The edge rejects request bodies larger than 64 KiB on `/api/*`. Only HTTP and HTTPS destinations
+are permitted. Release work must resolve DNS and reject
 loopback, private, link-local, carrier-grade NAT, and metadata-service addresses after
 resolution, with redirect revalidation to reduce DNS rebinding risk. Containers run on an
 isolated Compose network; production runtime must be non-root and use managed backups.
@@ -50,8 +56,10 @@ isolated Compose network; production runtime must be non-root and use managed ba
 ## Mitigations and verification
 
 Destination policy, permission policy, and cross-tenant queries receive unit and integration
-tests. Browser tests verify role-limited UI. Redirect resilience tests prove analytics cannot
-block a destination. Security review is required before each release.
+tests. Live acceptance tests verify authentication throttling, absent session IP and user-agent
+fields, and the edge request-size limit. Browser tests verify role-limited UI. Redirect
+resilience tests prove analytics cannot block a destination. Security review is required before
+each release.
 
 ## Residual risks and owners
 

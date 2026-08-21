@@ -3,7 +3,12 @@
 
   handle @dashboard {
     handle /api/* {
-      reverse_proxy api:3000
+      request_body {
+        max_size 64KiB
+      }
+      reverse_proxy api:3000 {
+        header_up X-Real-IP {remote_host}
+      }
     }
 
     handle {

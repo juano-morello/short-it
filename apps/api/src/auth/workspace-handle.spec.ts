@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getWorkspaceHandleError } from "./workspace-handle.js";
+import { assertWorkspaceHandle, getWorkspaceHandleError } from "./workspace-handle.js";
 
 describe("workspace handle policy", () => {
   it("accepts a lowercase handle with internal hyphens", () => {
@@ -15,5 +15,14 @@ describe("workspace handle policy", () => {
 
   it.each(["api", "app", "www"])("reserves the platform handle: %s", (handle) => {
     expect(getWorkspaceHandleError(handle)).toBe("That workspace handle is reserved.");
+  });
+
+  it("rejects an omitted handle at the server boundary", () => {
+    expect(getWorkspaceHandleError(undefined)).toContain("Workspace handles");
+  });
+
+  it("throws only when the server boundary receives an invalid handle", () => {
+    expect(() => assertWorkspaceHandle("ada-studio")).not.toThrow();
+    expect(() => assertWorkspaceHandle("ada--studio")).toThrow("Workspace handles");
   });
 });

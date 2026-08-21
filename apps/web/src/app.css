@@ -8,7 +8,7 @@ button {
   border: var(--border-width-strong) solid var(--color-border-strong);
   border-radius: var(--radius-none);
   background: var(--color-foreground);
-  color: var(--color-on-accent);
+  color: var(--color-background);
   box-shadow: var(--shadow-hard-btn);
   font-family: var(--font-mono);
   font-size: var(--text-mono-sm);
@@ -233,7 +233,7 @@ a:focus-visible {
 
 .role-chip {
   display: inline-block;
-  margin-top: var(--space-7);
+  margin-top: var(--space-8);
   padding: var(--space-2) var(--space-3);
   border: var(--border-width) solid var(--color-border-strong);
   font-family: var(--font-mono);

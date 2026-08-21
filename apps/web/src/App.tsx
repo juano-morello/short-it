@@ -2,7 +2,8 @@ import { type FormEvent, type ReactNode, useCallback, useEffect, useState } from
 import { authClient } from "./auth-client.js";
 import { MetricCard } from "./components/MetricCard.js";
 
-type Screen = "dashboard" | "landing" | "onboarding" | "sign-in" | "sign-up";
+type Screen = "dashboard" | "landing" | "onboarding" | "session-error" | "sign-in" | "sign-up";
+type SessionState = "dashboard" | "needs-workspace" | "signed-out" | "unavailable";
 
 type Workspace = {
   id: string;
@@ -18,9 +19,13 @@ const initialForm = {
   workspaceName: "",
 };
 
-function getErrorMessage(error: { message?: string } | null): string {
+function getWorkspaceErrorMessage(error: { message?: string } | null): string {
   return error?.message ?? "Something went wrong. Please try again.";
 }
+
+const accountCreationErrorMessage =
+  "We couldn't create your account. Check your details and try again.";
+const signInErrorMessage = "We couldn't sign you in. Check your details and try again.";
 
 export function App() {
   const [error, setError] = useState<string>();
@@ -31,25 +36,57 @@ export function App() {
   const [workspace, setWorkspace] = useState<Workspace>();
   const [workspaceRole, setWorkspaceRole] = useState("Workspace member");
 
-  const loadExistingSession = useCallback(async (): Promise<void> => {
-    const session = await authClient.getSession();
+  const loadExistingSession = useCallback(async (): Promise<SessionState> => {
+    setIsLoading(true);
+    setError(undefined);
 
-    if (!session.data?.user) {
-      setIsLoading(false);
-      return;
-    }
+    try {
+      const session = await authClient.getSession();
+      if (session.error) {
+        throw new Error(session.error.message);
+      }
 
-    const organizations = await authClient.organization.list();
-    const firstWorkspace = organizations.data?.[0];
+      if (!session.data?.user) {
+        setScreen("landing");
+        return "signed-out";
+      }
+      const user = session.data.user;
 
-    if (firstWorkspace) {
+      const organizations = await authClient.organization.list();
+      if (organizations.error) {
+        throw new Error(organizations.error.message);
+      }
+
+      const firstWorkspace = organizations.data?.[0];
+
+      if (!firstWorkspace) {
+        setScreen("onboarding");
+        return "needs-workspace";
+      }
+
+      const fullWorkspace = await authClient.organization.getFullOrganization({
+        query: { organizationId: firstWorkspace.id },
+      });
+      if (fullWorkspace.error) {
+        throw new Error(fullWorkspace.error.message);
+      }
+
+      const membership = fullWorkspace.data?.members.find((member) => member.userId === user.id);
+      if (!membership) {
+        throw new Error("The current user's workspace membership could not be resolved.");
+      }
+
       setWorkspace(firstWorkspace);
+      setWorkspaceRole(formatRole(membership.role));
       setScreen("dashboard");
-    } else {
-      setScreen("onboarding");
+      return "dashboard";
+    } catch {
+      setError("We couldn't load your workspace. Please try again.");
+      setScreen("session-error");
+      return "unavailable";
+    } finally {
+      setIsLoading(false);
     }
-
-    setIsLoading(false);
   }, []);
 
   useEffect(() => {
@@ -60,6 +97,11 @@ export function App() {
     setForm((current) => ({ ...current, [field]: value }));
   }
 
+  function moveTo(nextScreen: Screen): void {
+    setError(undefined);
+    setScreen(nextScreen);
+  }
+
   async function createWorkspace(): Promise<boolean> {
     const workspaceResult = await authClient.organization.create({
       keepCurrentActiveOrganization: true,
@@ -68,12 +110,13 @@ export function App() {
     });
 
     if (workspaceResult.error || !workspaceResult.data) {
-      setError(getErrorMessage(workspaceResult.error));
+      setError(getWorkspaceErrorMessage(workspaceResult.error));
       return false;
     }
 
     setWorkspace(workspaceResult.data);
     setWorkspaceRole("Owner");
+    setError(undefined);
     setScreen("dashboard");
     return true;
   }
@@ -83,23 +126,24 @@ export function App() {
     setError(undefined);
     setIsSubmitting(true);
 
-    const result = await authClient.signUp.email({
-      email: form.email.trim(),
-      name: form.name.trim(),
-      password: form.password,
-    });
+    try {
+      const signUp = await authClient.signUp.email({
+        email: form.email.trim(),
+        name: form.name.trim(),
+        password: form.password,
+      });
 
-    if (result.error) {
-      setError(getErrorMessage(result.error));
+      if (signUp.error) {
+        setError(accountCreationErrorMessage);
+        return;
+      }
+
+      moveTo("sign-in");
+    } catch {
+      setError(accountCreationErrorMessage);
+    } finally {
       setIsSubmitting(false);
-      return;
     }
-
-    const created = await createWorkspace();
-    if (!created) {
-      setScreen("onboarding");
-    }
-    setIsSubmitting(false);
   }
 
   async function handleSignIn(event: FormEvent<HTMLFormElement>): Promise<void> {
@@ -107,27 +151,36 @@ export function App() {
     setError(undefined);
     setIsSubmitting(true);
 
-    const result = await authClient.signIn.email({
-      email: form.email.trim(),
-      password: form.password,
-    });
+    try {
+      const result = await authClient.signIn.email({
+        email: form.email.trim(),
+        password: form.password,
+      });
 
-    if (result.error) {
-      setError(getErrorMessage(result.error));
+      if (result.error) {
+        setError(signInErrorMessage);
+        return;
+      }
+
+      await loadExistingSession();
+    } catch {
+      setError(signInErrorMessage);
+    } finally {
       setIsSubmitting(false);
-      return;
     }
-
-    await loadExistingSession();
-    setIsSubmitting(false);
   }
 
   async function handleWorkspaceRetry(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
     setError(undefined);
     setIsSubmitting(true);
-    await createWorkspace();
-    setIsSubmitting(false);
+    try {
+      await createWorkspace();
+    } catch {
+      setError("We couldn't create your workspace. Please try again.");
+    } finally {
+      setIsSubmitting(false);
+    }
   }
 
   if (isLoading) {
@@ -138,12 +191,25 @@ export function App() {
     return <Dashboard role={workspaceRole} workspace={workspace} />;
   }
 
+  if (screen === "session-error") {
+    return (
+      <AuthLayout title="We couldn't load your workspace">
+        <FormError error={error} />
+        <button onClick={() => void loadExistingSession()} type="button">
+          Try again
+        </button>
+      </AuthLayout>
+    );
+  }
+
   if (screen === "sign-up") {
     return (
-      <AuthLayout title="Create your workspace">
+      <AuthLayout title="Create your account">
+        <p className="intro">Create your account first, then sign in to choose your workspace.</p>
         <form className="auth-form" onSubmit={handleSignUp}>
           <TextField
             label="Your name"
+            maxLength={120}
             onChange={(value) => updateForm("name", value)}
             value={form.name}
           />
@@ -159,23 +225,12 @@ export function App() {
             type="password"
             value={form.password}
           />
-          <TextField
-            label="Workspace name"
-            onChange={(value) => updateForm("workspaceName", value)}
-            value={form.workspaceName}
-          />
-          <TextField
-            label="Workspace handle"
-            onChange={(value) => updateForm("workspaceHandle", value.toLowerCase())}
-            pattern="[a-z0-9][a-z0-9-]{1,28}[a-z0-9]"
-            value={form.workspaceHandle}
-          />
           <FormError error={error} />
           <button disabled={isSubmitting} type="submit">
-            Create workspace
+            Continue to sign in
           </button>
         </form>
-        <button className="text-button" onClick={() => setScreen("sign-in")} type="button">
+        <button className="text-button" onClick={() => moveTo("sign-in")} type="button">
           Sign in instead
         </button>
       </AuthLayout>
@@ -214,13 +269,15 @@ export function App() {
         <form className="auth-form" onSubmit={handleWorkspaceRetry}>
           <TextField
             label="Workspace name"
+            maxLength={120}
             onChange={(value) => updateForm("workspaceName", value)}
             value={form.workspaceName}
           />
           <TextField
             label="Workspace handle"
             onChange={(value) => updateForm("workspaceHandle", value.toLowerCase())}
-            pattern="[a-z0-9][a-z0-9-]{1,28}[a-z0-9]"
+            maxLength={30}
+            minLength={3}
             value={form.workspaceHandle}
           />
           <FormError error={error} />
@@ -251,10 +308,10 @@ export function App() {
           them useful.
         </p>
         <div className="action-row">
-          <button onClick={() => setScreen("sign-up")} type="button">
+          <button onClick={() => moveTo("sign-up")} type="button">
             Create a workspace
           </button>
-          <button className="text-button" onClick={() => setScreen("sign-in")} type="button">
+          <button className="text-button" onClick={() => moveTo("sign-in")} type="button">
             Sign in
           </button>
           <a href="#architecture">See the build notes</a>
@@ -278,6 +335,10 @@ export function App() {
       </section>
     </main>
   );
+}
+
+function formatRole(role: string): string {
+  return role.charAt(0).toUpperCase() + role.slice(1);
 }
 
 function AuthLayout({ children, title }: { children: ReactNode; title: string }) {
@@ -327,14 +388,16 @@ function FormError({ error }: { error: string | undefined }) {
 
 function TextField({
   label,
+  maxLength,
+  minLength,
   onChange,
-  pattern,
   type = "text",
   value,
 }: {
   label: string;
+  maxLength?: number;
+  minLength?: number;
   onChange: (value: string) => void;
-  pattern?: string;
   type?: string;
   value: string;
 }) {
@@ -345,8 +408,9 @@ function TextField({
       <span>{label}</span>
       <input
         id={id}
+        maxLength={maxLength}
+        minLength={minLength}
         onChange={(event) => onChange(event.target.value)}
-        pattern={pattern}
         required
         type={type}
         value={value}

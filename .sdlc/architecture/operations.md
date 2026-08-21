@@ -10,6 +10,11 @@ Docker build contexts exclude local dependency trees, generated output, test art
 metadata, and environment files through `.dockerignore`. This preserves reproducible image
 dependency installation and keeps developer secrets out of image contexts.
 
+The Caddy edge rejects bodies larger than 64 KiB for `/api/*` and overwrites `X-Real-IP` from the
+direct client connection. Better Auth uses that header for its in-memory rate-limit key while
+session persistence clears the IP and user-agent fields. A production proxy chain must either
+leave Caddy as the public edge or replace this rule with an equivalent trusted-header policy.
+
 ## Logs, metrics, and traces
 
 The API must emit structured, privacy-safe logs with request IDs. It must not log raw IPs,
@@ -36,8 +41,9 @@ selection and are deferred.
 
 ## Capacity and cost
 
-No provider or paid resource is provisioned. Quotas for new workspaces are intentionally
-conservative in the auth configuration and must be revisited with usage evidence.
+No provider or paid resource is provisioned. The demo runs Better Auth's in-memory limiter, so
+each API process maintains its own counters. Quotas and shared limiter storage must be revisited
+with usage evidence before running more than one API instance.
 
 ## Migrations and rollback
 

@@ -1,16 +1,23 @@
+import { randomUUID } from "node:crypto";
 import { expect, test } from "@playwright/test";
 
 test("a visitor creates an owner workspace", async ({ page }) => {
-  const suffix = Date.now().toString(36);
+  const suffix = randomUUID().replaceAll("-", "").slice(0, 12);
 
   await page.goto("/");
   await page.getByRole("button", { name: "Create a workspace" }).click();
 
-  await expect(page.getByRole("heading", { name: "Create your workspace" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Create your account" })).toBeVisible();
 
   await page.getByLabel("Your name").fill("Ada Lovelace");
   await page.getByLabel("Email").fill(`ada-${suffix}@example.test`);
   await page.getByLabel("Password").fill("correct-horse-battery-staple");
+  await page.getByRole("button", { name: "Continue to sign in" }).click();
+
+  await expect(page.getByRole("heading", { name: "Welcome back" })).toBeVisible();
+  await page.getByRole("button", { name: "Sign in" }).click();
+
+  await expect(page.getByRole("heading", { name: "Create your workspace" })).toBeVisible();
   await page.getByLabel("Workspace name").fill("Ada Studio");
   await page.getByLabel("Workspace handle").fill(`ada-${suffix}`);
   await page.getByRole("button", { name: "Create workspace" }).click();
