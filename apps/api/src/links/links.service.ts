@@ -5,6 +5,7 @@ import {
   Injectable,
 } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
+import { canCreateLinks } from "../auth/access-control.js";
 import { prisma } from "../database.js";
 import { assertSafeDestinationUrl } from "./destination-policy.js";
 
@@ -76,12 +77,6 @@ function assertOrganizationId(value: unknown): string {
     throw new BadRequestException("A workspace is required.");
   }
   return value;
-}
-
-function canCreateLinks(role: string): boolean {
-  return role
-    .split(",")
-    .some((assignedRole) => assignedRole === "owner" || assignedRole === "editor");
 }
 
 function isLinkSlugConflict(error: unknown): boolean {

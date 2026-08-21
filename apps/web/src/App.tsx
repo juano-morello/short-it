@@ -413,6 +413,7 @@ function Dashboard({
   value: string;
   workspace: Workspace;
 }) {
+  // This is presentation-only. LinksService is the authorization boundary.
   const canPublish = role
     .split(",")
     .some((assignedRole) => assignedRole === "owner" || assignedRole === "editor");

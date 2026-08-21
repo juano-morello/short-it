@@ -35,8 +35,9 @@ components and supports future visual checks.
 
 ## Test data and isolation
 
-Each integration test receives an isolated database lifecycle. Fixtures use synthetic URLs,
-emails, countries, and referrer hosts only.
+Each integration test receives an isolated database lifecycle. The BDD suite executes inside the
+local API container so its role fixtures can use the private Compose database without publishing
+PostgreSQL to the host. Fixtures use synthetic URLs, emails, countries, and referrer hosts only.
 
 ## Coverage policy
 
