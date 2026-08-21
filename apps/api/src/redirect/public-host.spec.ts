@@ -17,10 +17,18 @@ describe("public redirect host policy", () => {
     "Ada.short.it",
     "ada.short.it.",
     "ada--studio.short.it",
+    "a.short.it",
+    "ab.short.it",
+    `${"a".repeat(31)}.short.it`,
     "ada.short.it:0",
     "ada.short.it:65536",
   ])("rejects a host that is not one valid public workspace: %s", (host) => {
     expect(getPublicWorkspaceHandle(host, "short.it")).toBeUndefined();
+  });
+
+  it("accepts workspace host labels at the supported length boundaries", () => {
+    expect(getPublicWorkspaceHandle("abc.short.it", "short.it")).toBe("abc");
+    expect(getPublicWorkspaceHandle(`${"a".repeat(30)}.short.it`, "short.it")).toBe("a".repeat(30));
   });
 
   it("accepts only the launch CUID path segment", () => {

@@ -1,7 +1,7 @@
 import { APIError } from "better-auth";
 
 const reservedHandles = new Set(["api", "app", "www"]);
-const workspaceHandlePattern = /^(?!.*--)[a-z0-9](?:[a-z0-9-]{1,28}[a-z0-9])?$/;
+const workspaceHandlePattern = /^(?=.{3,30}$)(?!.*--)[a-z0-9](?:[a-z0-9-]*[a-z0-9])$/;
 
 export function getWorkspaceHandleError(handle: string | undefined): string | undefined {
   if (!handle || !workspaceHandlePattern.test(handle)) {
