@@ -25,12 +25,12 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @short-it/e2e exec playwright install --with-deps chromium
       - run: pnpm db:generate
-      - run: docker compose up -d --build
       - run: pnpm format:check
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm test:integration
+      - run: docker compose up -d --build
       - run: BDD_BASE_URL=http://app.localhost:8080 pnpm bdd
       - run: pnpm e2e
       - run: pnpm coverage
