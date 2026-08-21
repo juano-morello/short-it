@@ -8,4 +8,6 @@ playwright-report/
 storybook-static/
 test-results/
 .turbo/
+.idea/
+.pnpm-store/
 *.log
