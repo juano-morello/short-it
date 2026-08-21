@@ -69,7 +69,9 @@ services:
     depends_on: [api, web]
     volumes:
       - ./infra/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
-    networks: [private]
+    networks:
+      private:
+        aliases: [app.localhost]
 
 volumes:
   postgres-data:

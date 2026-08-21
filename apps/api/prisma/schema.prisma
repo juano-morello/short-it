@@ -101,7 +101,7 @@ model Invitation {
 model Link {
   id             String       @id @default(cuid())
   organizationId String
-  slug           String
+  slug           String       @default(cuid())
   destinationUrl String
   createdAt      DateTime     @default(now())
   publishedAt    DateTime?

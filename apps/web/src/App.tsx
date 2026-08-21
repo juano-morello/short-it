@@ -1,6 +1,7 @@
 import { type FormEvent, type ReactNode, useCallback, useEffect, useState } from "react";
-import { authClient } from "./auth-client.js";
 import { MetricCard } from "./components/MetricCard.js";
+import { linkGateway, type PublishedLink } from "./link-gateway.js";
+import { workspaceGateway } from "./workspace-gateway.js";
 
 type Screen = "dashboard" | "landing" | "onboarding" | "session-error" | "sign-in" | "sign-up";
 type SessionState = "dashboard" | "needs-workspace" | "signed-out" | "unavailable";
@@ -11,10 +12,13 @@ type Workspace = {
   slug: string;
 };
 
+type WorkspaceRole = string;
+
 const initialForm = {
   email: "",
   name: "",
   password: "",
+  destinationUrl: "",
   workspaceHandle: "",
   workspaceName: "",
 };
@@ -32,16 +36,17 @@ export function App() {
   const [form, setForm] = useState(initialForm);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [publishedLink, setPublishedLink] = useState<PublishedLink>();
   const [screen, setScreen] = useState<Screen>("landing");
   const [workspace, setWorkspace] = useState<Workspace>();
-  const [workspaceRole, setWorkspaceRole] = useState("Workspace member");
+  const [workspaceRole, setWorkspaceRole] = useState<WorkspaceRole>();
 
   const loadExistingSession = useCallback(async (): Promise<SessionState> => {
     setIsLoading(true);
     setError(undefined);
 
     try {
-      const session = await authClient.getSession();
+      const session = await workspaceGateway.getSession();
       if (session.error) {
         throw new Error(session.error.message);
       }
@@ -52,7 +57,7 @@ export function App() {
       }
       const user = session.data.user;
 
-      const organizations = await authClient.organization.list();
+      const organizations = await workspaceGateway.listWorkspaces();
       if (organizations.error) {
         throw new Error(organizations.error.message);
       }
@@ -64,9 +69,7 @@ export function App() {
         return "needs-workspace";
       }
 
-      const fullWorkspace = await authClient.organization.getFullOrganization({
-        query: { organizationId: firstWorkspace.id },
-      });
+      const fullWorkspace = await workspaceGateway.getWorkspace(firstWorkspace.id);
       if (fullWorkspace.error) {
         throw new Error(fullWorkspace.error.message);
       }
@@ -77,7 +80,7 @@ export function App() {
       }
 
       setWorkspace(firstWorkspace);
-      setWorkspaceRole(formatRole(membership.role));
+      setWorkspaceRole(membership.role as WorkspaceRole);
       setScreen("dashboard");
       return "dashboard";
     } catch {
@@ -103,8 +106,7 @@ export function App() {
   }
 
   async function createWorkspace(): Promise<boolean> {
-    const workspaceResult = await authClient.organization.create({
-      keepCurrentActiveOrganization: true,
+    const workspaceResult = await workspaceGateway.createWorkspace({
       name: form.workspaceName.trim(),
       slug: form.workspaceHandle.trim(),
     });
@@ -115,7 +117,7 @@ export function App() {
     }
 
     setWorkspace(workspaceResult.data);
-    setWorkspaceRole("Owner");
+    setWorkspaceRole("owner");
     setError(undefined);
     setScreen("dashboard");
     return true;
@@ -127,7 +129,7 @@ export function App() {
     setIsSubmitting(true);
 
     try {
-      const signUp = await authClient.signUp.email({
+      const signUp = await workspaceGateway.signUp({
         email: form.email.trim(),
         name: form.name.trim(),
         password: form.password,
@@ -152,7 +154,7 @@ export function App() {
     setIsSubmitting(true);
 
     try {
-      const result = await authClient.signIn.email({
+      const result = await workspaceGateway.signIn({
         email: form.email.trim(),
         password: form.password,
       });
@@ -183,12 +185,45 @@ export function App() {
     }
   }
 
+  async function handleLinkPublication(event: FormEvent<HTMLFormElement>): Promise<void> {
+    event.preventDefault();
+    if (!workspace) {
+      return;
+    }
+
+    setError(undefined);
+    setIsSubmitting(true);
+    const result = await linkGateway.publish({
+      destinationUrl: form.destinationUrl.trim(),
+      organizationId: workspace.id,
+    });
+
+    if (result.error) {
+      setError(result.error);
+    } else {
+      setPublishedLink(result.data);
+      updateForm("destinationUrl", "");
+    }
+    setIsSubmitting(false);
+  }
+
   if (isLoading) {
     return <main className="site-shell" aria-busy="true" />;
   }
 
-  if (screen === "dashboard" && workspace) {
-    return <Dashboard role={workspaceRole} workspace={workspace} />;
+  if (screen === "dashboard" && workspace && workspaceRole) {
+    return (
+      <Dashboard
+        error={error}
+        isSubmitting={isSubmitting}
+        onPublish={handleLinkPublication}
+        onUpdateDestination={(value) => updateForm("destinationUrl", value)}
+        publishedLink={publishedLink}
+        role={workspaceRole}
+        value={form.destinationUrl}
+        workspace={workspace}
+      />
+    );
   }
 
   if (screen === "session-error") {
@@ -359,20 +394,69 @@ function AuthLayout({ children, title }: { children: ReactNode; title: string })
   );
 }
 
-function Dashboard({ role, workspace }: { role: string; workspace: Workspace }) {
+function Dashboard({
+  error,
+  isSubmitting,
+  onPublish,
+  onUpdateDestination,
+  publishedLink,
+  role,
+  value,
+  workspace,
+}: {
+  error: string | undefined;
+  isSubmitting: boolean;
+  onPublish: (event: FormEvent<HTMLFormElement>) => Promise<void>;
+  onUpdateDestination: (value: string) => void;
+  publishedLink: PublishedLink | undefined;
+  role: WorkspaceRole;
+  value: string;
+  workspace: Workspace;
+}) {
+  // This is presentation-only. LinksService is the authorization boundary.
+  const canPublish = role
+    .split(",")
+    .some((assignedRole) => assignedRole === "owner" || assignedRole === "editor");
+
   return (
     <main className="site-shell auth-shell">
       <header className="topbar">
         <a className="wordmark" href="/">
           short<span>.it</span>
         </a>
-        <span className="environment">{role.toUpperCase()}</span>
+        <span className="environment">{formatRole(role).toUpperCase()}</span>
       </header>
       <section className="auth-panel" aria-labelledby="workspace-title">
         <p className="eyebrow">WORKSPACE / {workspace.slug}</p>
         <h1 id="workspace-title">{workspace.name}</h1>
         <p className="intro">Your workspace is ready for its first immutable destination.</p>
-        <span className="role-chip">{role}</span>
+        <span className="role-chip">{formatRole(role)}</span>
+        {canPublish ? (
+          <form className="auth-form" onSubmit={onPublish}>
+            <TextField
+              label="Destination URL"
+              onChange={onUpdateDestination}
+              type="url"
+              value={value}
+            />
+            <FormError error={error} />
+            <button disabled={isSubmitting} type="submit">
+              Publish link
+            </button>
+          </form>
+        ) : (
+          <p className="intro">
+            Your analyst role can view link performance but cannot publish links.
+          </p>
+        )}
+        {publishedLink ? (
+          <p className="published-link">
+            Published link:{" "}
+            <strong>
+              {workspace.slug}/{publishedLink.slug}
+            </strong>
+          </p>
+        ) : null}
       </section>
     </main>
   );

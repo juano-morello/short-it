@@ -27,9 +27,10 @@ flowchart LR
 ## Data and consistency
 
 Better Auth's Organization represents a workspace. Link records carry `organizationId`,
-with composite uniqueness on `organizationId, slug`. Request guards must establish the
-active member and role from the authenticated session and membership record. Database
-queries never trust an organization identifier supplied by a browser.
+with composite uniqueness on `organizationId, slug`. Authenticated API services establish the
+active member and role from the authenticated session and membership record before an
+organization-scoped query. Database queries never trust an organization identifier supplied by a
+browser.
 
 Raw IP addresses and raw user-agent strings are excluded from analytics storage. The future
 redirect pipeline derives a keyed daily visitor identifier, discards it within 24 hours,

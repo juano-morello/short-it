@@ -30,10 +30,11 @@ which links are useful without bolting analytics onto every destination.
 
 ## Scope
 
-Links have HTTP or HTTPS destinations and custom slugs. After a link is published, its
-destination is immutable. A replacement link is required to point the public URL at a
-different destination. Analytics cover clicks, daily unique visitors, time series,
-referrer host, country, and device category. Aggregates are retained for 12 months.
+Links have HTTP or HTTPS destinations and launch with server-generated CUID slugs. Vanity slugs
+are deferred to v1.1. After a link is published, its destination is immutable. A replacement link
+is required to point the public URL at a different destination. Analytics cover clicks, daily
+unique visitors, time series, referrer host, country, and device category. Aggregates are retained
+for 12 months.
 
 ## Success criteria
 

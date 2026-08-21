@@ -13,6 +13,7 @@
     "test": "turbo test --filter=!@short-it/e2e",
     "test:integration": "turbo test:integration --filter=!@short-it/e2e",
     "bdd": "turbo bdd",
+    "bdd:publication-guardrails": "pnpm --filter @short-it/api bdd:publication-guardrails",
     "bdd:rate-limit": "pnpm --filter @short-it/api bdd:rate-limit",
     "e2e": "turbo e2e",
     "coverage": "turbo coverage",

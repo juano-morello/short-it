@@ -28,10 +28,13 @@ calculating the rate-limit key. Session hooks clear IP and user-agent values bef
 Automatic sign-in after registration is disabled so duplicate registrations receive Better Auth's
 generic response. The browser signs in explicitly before creating the workspace. Sign-in and
 sign-up allow 20 attempts per 10 seconds in the public demo. No email verification or CAPTCHA is
-planned for the demo. New workspace and invitation quotas reduce basic abuse. Nest guards and
-Prisma scopes provide the tenant boundary. The product must never accept a browser-provided
-organization ID as proof of access. A shared rate limiter is a prerequisite for multi-instance
-production deployment.
+planned for the demo. New workspace and invitation quotas reduce basic abuse. Authenticated API
+services and Prisma scopes provide the tenant boundary. The product must never accept a browser-provided
+organization ID as proof of access. Link publication permits 30 attempts per member/workspace per
+ten minutes, 1,000 published links per workspace, and destination URLs of at most 2,048 characters.
+The single-instance demo keeps attempt windows and quota check/write coordination in process while
+the link count remains durable in PostgreSQL. A shared limiter and quota coordination are
+prerequisites for multi-instance production deployment.
 
 ## Data classification and lifecycle
 
@@ -55,11 +58,11 @@ isolated Compose network; production runtime must be non-root and use managed ba
 
 ## Mitigations and verification
 
-Destination policy, permission policy, and cross-tenant queries receive unit and integration
-tests. Live acceptance tests verify authentication throttling, absent session IP and user-agent
-fields, and the edge request-size limit. Browser tests verify role-limited UI. Redirect
-resilience tests prove analytics cannot block a destination. Security review is required before
-each release.
+Destination policy, permission policy, publication limits, and cross-tenant queries receive unit
+and integration tests. Live acceptance tests verify authentication throttling, link-publication
+throttling, absent session IP and user-agent fields, and the edge request-size limit. Browser tests
+verify role-limited UI. Redirect resilience tests prove analytics cannot block a destination.
+Security review is required before each release.
 
 ## Residual risks and owners
 

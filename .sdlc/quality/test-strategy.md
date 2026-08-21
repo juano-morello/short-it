@@ -4,7 +4,8 @@
 
 Core product slices use executable Gherkin. The scaffold begins with the health-probe feature.
 WORK-002 covers registration, workspace ownership, safe handle creation, and isolated rate-limit
-behavior. Future slices cover link creation, redirect-first behavior, analytics, and deletion
+behavior. WORK-003 covers server-generated CUID link publication, destination safety, and
+tenant-scoped authorization. Future slices cover redirect-first behavior, analytics, and deletion
 lifecycle.
 
 ## Outside-in TDD workflow
@@ -22,8 +23,9 @@ scenario runs alone against a fresh Compose stack because its counter is intenti
 ## Integration and contract tests
 
 Use Testcontainers PostgreSQL for Prisma migrations, Better Auth organization behavior,
-database scoping, and redirect persistence. Shared contracts prevent dashboard/API shape
-drift.
+database scoping, and redirect persistence. The current internal link API owns its request and
+response representation in its server and browser gateways; a package-level shared contract is
+reserved for a future public or cross-client API.
 
 ## E2E and visual regression
 
@@ -33,8 +35,9 @@ components and supports future visual checks.
 
 ## Test data and isolation
 
-Each integration test receives an isolated database lifecycle. Fixtures use synthetic URLs,
-emails, countries, and referrer hosts only.
+Each integration test receives an isolated database lifecycle. The BDD suite executes inside the
+local API container so its role fixtures can use the private Compose database without publishing
+PostgreSQL to the host. Fixtures use synthetic URLs, emails, countries, and referrer hosts only.
 
 ## Coverage policy
 
@@ -51,7 +54,8 @@ enrichment fail. Load and latency targets are deferred until hosting is selected
 ## CI gates and exact commands
 
 Run `pnpm format:check`, `pnpm lint`, `pnpm typecheck`, `pnpm test`,
-`pnpm test:integration`, `pnpm bdd`, `pnpm bdd:rate-limit`, `pnpm e2e`, `pnpm coverage`,
+`pnpm test:integration`, `pnpm bdd`, `pnpm bdd:publication-guardrails`, `pnpm bdd:rate-limit`,
+`pnpm e2e`, `pnpm coverage`,
 `pnpm db:validate`, `pnpm storybook:build`, `pnpm compose:config`,
 `pnpm docker:build`, and `pnpm security`.
 
