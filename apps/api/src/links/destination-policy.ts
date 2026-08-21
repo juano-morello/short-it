@@ -8,7 +8,6 @@ type IpRange = readonly [network: string, prefixLength: number];
 const resolutionLogger = new Logger("DestinationPolicy");
 const resolutionTimeoutMs = 2_000;
 const maximumConcurrentResolutions = 10;
-let activeResolutions = 0;
 
 // IANA Special-Purpose Address registries, reviewed 2026-08-21.
 const nonPublicIpv4Ranges: readonly IpRange[] = [
@@ -77,6 +76,22 @@ export async function assertSafeDestinationUrl(
   resolveAddresses: AddressResolver = defaultAddressResolver,
   requestId?: string,
 ): Promise<string> {
+  return assertSafeUrl(value, resolveAddresses, requestId, publicationResolutionPool);
+}
+
+export async function assertSafeRedirectDestinationUrl(
+  value: unknown,
+  resolveAddresses: AddressResolver = defaultAddressResolver,
+): Promise<string> {
+  return assertSafeUrl(value, resolveAddresses, undefined, redirectResolutionPool);
+}
+
+async function assertSafeUrl(
+  value: unknown,
+  resolveAddresses: AddressResolver,
+  requestId: string | undefined,
+  resolutionPool: ResolutionPool,
+): Promise<string> {
   if (typeof value !== "string" || !value.trim()) {
     throw new BadRequestException("A link destination is required.");
   }
@@ -98,7 +113,7 @@ export async function assertSafeDestinationUrl(
     throw new BadRequestException("Link destinations must not resolve privately.");
   }
 
-  const addresses = await resolvePublicAddresses(url.hostname, resolveAddresses, requestId);
+  const addresses = await resolutionPool.resolve(url.hostname, resolveAddresses, requestId);
   if (!addresses.length || addresses.some(({ address }) => isPrivateOrReservedAddress(address))) {
     throw new BadRequestException("Link destinations must not resolve privately.");
   }
@@ -106,38 +121,65 @@ export async function assertSafeDestinationUrl(
   return url.toString();
 }
 
-async function resolvePublicAddresses(
-  hostname: string,
-  resolveAddresses: AddressResolver,
-  requestId: string | undefined,
-): Promise<Array<{ address: string }>> {
-  if (activeResolutions >= maximumConcurrentResolutions) {
-    logResolution("capacity-exhausted", 0, requestId);
-    throw new ServiceUnavailableException("Destination validation is temporarily unavailable.");
-  }
+class ResolutionPool {
+  private activeResolutions = 0;
+  private readonly inFlight = new Map<string, Promise<Array<{ address: string }>>>();
 
-  activeResolutions += 1;
-  const resolution = Promise.resolve().then(() => resolveAddresses(hostname));
-  void resolution.then(releaseResolution, releaseResolution);
-  const startedAt = performance.now();
-  try {
-    const addresses = await resolveWithTimeout(resolution);
-    logResolution("resolved", performance.now() - startedAt, requestId);
-    return addresses;
-  } catch (error) {
-    const elapsedMs = performance.now() - startedAt;
-    if (isTransientResolutionError(error)) {
-      logResolution("unavailable", elapsedMs, requestId);
-      throw new ServiceUnavailableException("Destination validation is temporarily unavailable.");
+  constructor(
+    private readonly event: string,
+    private readonly coalesceInFlight: boolean,
+  ) {}
+
+  async resolve(
+    hostname: string,
+    resolveAddresses: AddressResolver,
+    requestId: string | undefined,
+  ): Promise<Array<{ address: string }>> {
+    let resolution = this.coalesceInFlight ? this.inFlight.get(hostname) : undefined;
+    if (!resolution) {
+      if (this.activeResolutions >= maximumConcurrentResolutions) {
+        logResolution(this.event, "capacity-exhausted", 0, requestId);
+        throw new ServiceUnavailableException("Destination validation is temporarily unavailable.");
+      }
+
+      this.activeResolutions += 1;
+      const startedResolution = Promise.resolve().then(() => resolveAddresses(hostname));
+      resolution = startedResolution;
+      if (this.coalesceInFlight) {
+        this.inFlight.set(hostname, startedResolution);
+      }
+      void startedResolution.then(
+        () => this.release(hostname, startedResolution),
+        () => this.release(hostname, startedResolution),
+      );
     }
-    logResolution("unresolvable", elapsedMs, requestId);
-    throw new BadRequestException("Link destinations must not resolve privately.");
+
+    const startedAt = performance.now();
+    try {
+      const addresses = await resolveWithTimeout(resolution);
+      logResolution(this.event, "resolved", performance.now() - startedAt, requestId);
+      return addresses;
+    } catch (error) {
+      const elapsedMs = performance.now() - startedAt;
+      if (isTransientResolutionError(error)) {
+        logResolution(this.event, "unavailable", elapsedMs, requestId);
+        throw new ServiceUnavailableException("Destination validation is temporarily unavailable.");
+      }
+      logResolution(this.event, "unresolvable", elapsedMs, requestId);
+      throw new BadRequestException("Link destinations must not resolve privately.");
+    }
+  }
+
+  private release(hostname: string, resolution: Promise<Array<{ address: string }>>): void {
+    this.activeResolutions -= 1;
+    if (this.inFlight.get(hostname) === resolution) {
+      this.inFlight.delete(hostname);
+    }
   }
 }
 
-function releaseResolution(): void {
-  activeResolutions -= 1;
-}
+const publicationResolutionPool = new ResolutionPool("link_destination_resolution", false);
+const redirectResolutionPool = new ResolutionPool("redirect_destination_resolution", true);
 
 function isLocalHostname(hostname: string): boolean {
   const normalized = hostname.toLowerCase();
@@ -173,11 +215,16 @@ function isTransientResolutionError(error: unknown): boolean {
   );
 }
 
-function logResolution(outcome: string, durationMs: number, requestId: string | undefined): void {
+function logResolution(
+  event: string,
+  outcome: string,
+  durationMs: number,
+  requestId: string | undefined,
+): void {
   resolutionLogger.log(
     JSON.stringify({
       durationMs: Math.round(durationMs),
-      event: "link_destination_resolution",
+      event,
       outcome,
       requestId: requestId ?? "unavailable",
     }),

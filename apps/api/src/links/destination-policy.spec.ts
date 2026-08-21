@@ -1,6 +1,9 @@
 import { BadRequestException, ServiceUnavailableException } from "@nestjs/common";
 import { describe, expect, it, vi } from "vitest";
-import { assertSafeDestinationUrl } from "./destination-policy.js";
+import {
+  assertSafeDestinationUrl,
+  assertSafeRedirectDestinationUrl,
+} from "./destination-policy.js";
 
 describe("assertSafeDestinationUrl", () => {
   it("normalizes a public HTTP(S) destination after resolving every address", async () => {
@@ -179,5 +182,65 @@ describe("assertSafeDestinationUrl", () => {
         { address: "2606:4700::1111" },
       ]),
     ).resolves.toBe("https://public.example/");
+  });
+});
+
+describe("assertSafeRedirectDestinationUrl", () => {
+  it("revalidates every sequential redirect without retaining a DNS result", async () => {
+    const resolveAddresses = vi.fn(async () => [{ address: "93.184.216.34" }]);
+
+    await assertSafeRedirectDestinationUrl("https://public.example", resolveAddresses);
+    await assertSafeRedirectDestinationUrl("https://public.example", resolveAddresses);
+
+    expect(resolveAddresses).toHaveBeenCalledTimes(2);
+  });
+
+  it("coalesces only concurrent redirect validations for the same hostname", async () => {
+    let settleResolution: ((addresses: Array<{ address: string }>) => void) | undefined;
+    const resolveAddresses = vi.fn(
+      async () =>
+        new Promise<Array<{ address: string }>>((resolve) => {
+          settleResolution = resolve;
+        }),
+    );
+
+    const first = assertSafeRedirectDestinationUrl("https://public.example", resolveAddresses);
+    const second = assertSafeRedirectDestinationUrl(
+      "https://public.example/path",
+      resolveAddresses,
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(resolveAddresses).toHaveBeenCalledTimes(1);
+
+    settleResolution?.([{ address: "93.184.216.34" }]);
+    await expect(first).resolves.toBe("https://public.example/");
+    await expect(second).resolves.toBe("https://public.example/path");
+  });
+
+  it("keeps redirect-time resolution capacity independent from link publication capacity", async () => {
+    const settlePublicationResolutions: Array<(addresses: Array<{ address: string }>) => void> = [];
+    const publicationRequests = Array.from({ length: 10 }, (_, index) =>
+      assertSafeDestinationUrl(
+        `https://publication-${index}.example`,
+        async () =>
+          new Promise<Array<{ address: string }>>((resolve) => {
+            settlePublicationResolutions.push(resolve);
+          }),
+      ),
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+
+    await expect(
+      assertSafeRedirectDestinationUrl("https://redirect.example", async () => [
+        { address: "93.184.216.34" },
+      ]),
+    ).resolves.toBe("https://redirect.example/");
+
+    for (const settle of settlePublicationResolutions) {
+      settle([{ address: "93.184.216.34" }]);
+    }
+    await Promise.all(publicationRequests);
   });
 });
