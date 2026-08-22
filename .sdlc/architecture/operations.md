@@ -23,6 +23,12 @@ document the source separately.
 
 ## Logs, metrics, and traces
 
+For irreversible account and workspace deletion, `DeletionAudit` writes structured JSON outcomes with
+event, success or rejection class, HTTP status, request ID, and latency. It deliberately excludes
+email addresses, workspace handles, record IDs, cookies, IP addresses, and user agents. Before
+production enables deletion, configure a dashboard and alert for deletion failures and an unusual
+rejection rate, retaining these operational logs under the environment's approved log policy.
+
 The API must emit structured, privacy-safe logs with request IDs. It must not log raw IPs,
 raw user agents, session tokens, invitation URLs, or destination query strings. Product
 metrics include redirect success and failure and analytics-write failures. Link publication logs a
@@ -84,6 +90,10 @@ application deletes accepted and cancelled invitations immediately. Before produ
 must run `node apps/api/dist/auth/prune-invitations.js` in the production API image at least every
 five minutes and alert on a failed run or no successful run for ten minutes. An overdue invitation
 prune is a retention breach.
+
+Workspace and account deletion are irreversible application actions. Code rollback cannot recover
+their records. Before production, the selected provider must supply tested backup and restore
+evidence before users are offered deletion in a hosted environment.
 
 ## Migrations and rollback
 

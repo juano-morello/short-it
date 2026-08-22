@@ -46,6 +46,7 @@ export function App() {
   const [error, setError] = useState<string>();
   const [analyticsError, setAnalyticsError] = useState<string>();
   const [analyticsOverview, setAnalyticsOverview] = useState<AnalyticsOverview>();
+  const [accountEmail, setAccountEmail] = useState<string>();
   const [isAnalyticsLoading, setIsAnalyticsLoading] = useState(false);
   const [form, setForm] = useState(initialForm);
   const [invitationActionError, setInvitationActionError] = useState<string>();
@@ -53,6 +54,7 @@ export function App() {
   const [invitationListState, setInvitationListState] = useState<InvitationListState>("idle");
   const [isLoading, setIsLoading] = useState(true);
   const [isInvitationSubmitting, setIsInvitationSubmitting] = useState(false);
+  const [isDeletionSubmitting, setIsDeletionSubmitting] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const acceptedInvitationOrganizationId = useRef<string | undefined>(undefined);
   const pendingInvitationId = useRef<string | undefined>(undefined);
@@ -85,9 +87,11 @@ export function App() {
         }
 
         if (!session.data?.user) {
+          setAccountEmail(undefined);
           setScreen("landing");
           return "signed-out";
         }
+        setAccountEmail(session.data.user.email);
         const invitationId =
           invitationToAccept ?? invitationIdFromHash ?? pendingInvitationId.current;
         if (invitationId) {
@@ -386,6 +390,38 @@ export function App() {
     setIsInvitationSubmitting(false);
   }
 
+  async function handleWorkspaceDeletion(): Promise<boolean> {
+    if (!workspace) return false;
+    setIsDeletionSubmitting(true);
+    const result = await workspaceGateway.deleteWorkspace(workspace.id);
+    if (result.error) {
+      setIsDeletionSubmitting(false);
+      return false;
+    }
+    setWorkspace(undefined);
+    setWorkspaceRole(undefined);
+    setPublishedLink(undefined);
+    await loadExistingSession();
+    setIsDeletionSubmitting(false);
+    return true;
+  }
+
+  async function handleAccountDeletion(confirmationEmail: string): Promise<boolean> {
+    if (!accountEmail) return false;
+    setIsDeletionSubmitting(true);
+    const result = await workspaceGateway.deleteAccount(confirmationEmail);
+    if (result.error) {
+      setIsDeletionSubmitting(false);
+      return false;
+    }
+    setWorkspace(undefined);
+    setWorkspaceRole(undefined);
+    setPublishedLink(undefined);
+    await loadExistingSession();
+    setIsDeletionSubmitting(false);
+    return true;
+  }
+
   if (isLoading) {
     return <main className="site-shell" aria-busy="true" />;
   }
@@ -396,10 +432,13 @@ export function App() {
         error={error}
         analyticsError={analyticsError}
         analyticsOverview={analyticsOverview}
+        accountEmail={accountEmail}
         isAnalyticsLoading={isAnalyticsLoading}
         isSubmitting={isSubmitting}
         onPublish={handleLinkPublication}
         onCancelInvitation={handleInvitationCancellation}
+        onDeleteAccount={handleAccountDeletion}
+        onDeleteWorkspace={handleWorkspaceDeletion}
         onCreateInvitation={handleInvitation}
         onUpdateDestination={(value) => updateForm("destinationUrl", value)}
         publishedLink={publishedLink}
@@ -409,6 +448,7 @@ export function App() {
         invitationListState={invitationListState}
         invitations={invitations}
         isInvitationSubmitting={isInvitationSubmitting}
+        isDeletionSubmitting={isDeletionSubmitting}
         onRetryInvitationList={loadInvitations}
         role={workspaceRole}
         value={form.destinationUrl}
@@ -540,6 +580,11 @@ export function App() {
             Create workspace
           </button>
         </form>
+        <DeletionPanel
+          accountEmail={accountEmail}
+          isSubmitting={isDeletionSubmitting}
+          onDeleteAccount={handleAccountDeletion}
+        />
       </AuthLayout>
     );
   }
@@ -615,10 +660,12 @@ function AuthLayout({ children, title }: { children: ReactNode; title: string })
 }
 
 function Dashboard({
+  accountEmail,
   analyticsError,
   analyticsOverview,
   error,
   isAnalyticsLoading,
+  isDeletionSubmitting,
   invitationActionError,
   invitationListError,
   invitationListState,
@@ -627,6 +674,8 @@ function Dashboard({
   invitationLink,
   invitations,
   onCancelInvitation,
+  onDeleteAccount,
+  onDeleteWorkspace,
   onCreateInvitation,
   onPublish,
   onRetryInvitationList,
@@ -636,10 +685,12 @@ function Dashboard({
   value,
   workspace,
 }: {
+  accountEmail: string | undefined;
   analyticsError: string | undefined;
   analyticsOverview: AnalyticsOverview | undefined;
   error: string | undefined;
   isAnalyticsLoading: boolean;
+  isDeletionSubmitting: boolean;
   isSubmitting: boolean;
   isInvitationSubmitting: boolean;
   invitationLink: string | undefined;
@@ -648,6 +699,8 @@ function Dashboard({
   invitationListState: InvitationListState;
   invitations: PendingInvitation[];
   onCancelInvitation: (invitationId: string) => Promise<void>;
+  onDeleteAccount: (confirmationEmail: string) => Promise<boolean>;
+  onDeleteWorkspace: () => Promise<boolean>;
   onCreateInvitation: (
     event: FormEvent<HTMLFormElement>,
     role: "analyst" | "editor",
@@ -723,8 +776,110 @@ function Dashboard({
           isLoading={isAnalyticsLoading}
           overview={analyticsOverview}
         />
+        <DeletionPanel
+          accountEmail={accountEmail}
+          isSubmitting={isDeletionSubmitting}
+          onDeleteAccount={onDeleteAccount}
+          onDeleteWorkspace={onDeleteWorkspace}
+          workspace={workspace}
+          workspaceRole={role}
+        />
       </section>
     </main>
+  );
+}
+
+function DeletionPanel({
+  accountEmail,
+  isSubmitting,
+  onDeleteAccount,
+  onDeleteWorkspace,
+  workspace,
+  workspaceRole,
+}: {
+  accountEmail: string | undefined;
+  isSubmitting: boolean;
+  onDeleteAccount: (confirmationEmail: string) => Promise<boolean>;
+  onDeleteWorkspace?: () => Promise<boolean>;
+  workspace?: Workspace;
+  workspaceRole?: WorkspaceRole;
+}) {
+  const [accountConfirmation, setAccountConfirmation] = useState("");
+  const [deletionError, setDeletionError] = useState<string>();
+  const [workspaceConfirmation, setWorkspaceConfirmation] = useState("");
+  const isOwner = workspace && workspaceRole?.split(",").includes("owner");
+
+  async function deleteWorkspace(): Promise<void> {
+    if (!workspace || !onDeleteWorkspace || workspaceConfirmation !== workspace.slug) {
+      setDeletionError("Enter the exact workspace handle to delete this workspace.");
+      return;
+    }
+    setDeletionError(undefined);
+    if (!(await onDeleteWorkspace())) {
+      setDeletionError("We couldn't delete this workspace. Please try again.");
+    }
+  }
+
+  async function deleteAccount(): Promise<void> {
+    if (!accountEmail || accountConfirmation !== accountEmail) {
+      setDeletionError("Enter your account email to delete your account.");
+      return;
+    }
+    setDeletionError(undefined);
+    if (!(await onDeleteAccount(accountConfirmation))) {
+      setDeletionError("We couldn't delete your account. Resolve owned workspaces and try again.");
+    }
+  }
+
+  return (
+    <section className="analytics-panel" aria-labelledby="deletion-title">
+      <p className="eyebrow">IRREVERSIBLE ACTIONS</p>
+      <h2 id="deletion-title">Delete data</h2>
+      {isOwner ? (
+        <form
+          className="auth-form"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void deleteWorkspace();
+          }}
+        >
+          <p className="intro">
+            Delete this workspace, its links, invitations, and analytics. Enter {workspace.slug} to
+            confirm.
+          </p>
+          <TextField
+            label="Confirm workspace handle"
+            onChange={setWorkspaceConfirmation}
+            value={workspaceConfirmation}
+          />
+          <button disabled={isSubmitting} type="submit">
+            Delete workspace permanently
+          </button>
+        </form>
+      ) : null}
+      <form
+        className="auth-form"
+        onSubmit={(event) => {
+          event.preventDefault();
+          void deleteAccount();
+        }}
+      >
+        <p className="intro">
+          Delete your account after you have resolved every workspace you own. Enter your account
+          email to confirm.
+        </p>
+        <TextField
+          label="Confirm account email"
+          onChange={setAccountConfirmation}
+          type="email"
+          value={accountConfirmation}
+        />
+        <FormError error={deletionError} />
+        <button disabled={isSubmitting} type="submit">
+          Delete account permanently
+        </button>
+      </form>
+    </section>
   );
 }
 

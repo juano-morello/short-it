@@ -77,6 +77,11 @@ jobs:
       - name: Wait for the local stack
         run: bash scripts/wait-for-local-stack.sh
       - run: BDD_BASE_URL=http://app.localhost:8080 pnpm bdd:rate-limit
+      - name: Restart the local stack for workspace lifecycle scenarios
+        run: docker compose down --volumes && docker compose up -d --build
+      - name: Wait for the local stack before workspace lifecycle scenarios
+        run: bash scripts/wait-for-local-stack.sh
+      - run: BDD_BASE_URL=http://app.localhost:8080 pnpm bdd:workspace-lifecycle
       - name: Restart the local stack for browser tests
         run: docker compose down --volumes && docker compose up -d --build
       - name: Wait for the local stack before browser tests

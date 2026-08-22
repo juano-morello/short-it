@@ -2,6 +2,8 @@ import { Module } from "@nestjs/common";
 import { AnalyticsCaptureService } from "./analytics/analytics-capture.service.js";
 import { AnalyticsOverviewController } from "./analytics/analytics-overview.controller.js";
 import { AnalyticsOverviewService } from "./analytics/analytics-overview.service.js";
+import { AccountDeletionController } from "./auth/account-deletion.controller.js";
+import { AccountDeletionService } from "./auth/account-deletion.service.js";
 import { WorkspaceInvitationController } from "./auth/workspace-invitation.controller.js";
 import { WorkspaceInvitationService } from "./auth/workspace-invitation.service.js";
 import { WorkspaceMembershipController } from "./auth/workspace-membership.controller.js";
@@ -14,6 +16,7 @@ import { PublicRedirectService } from "./redirect/public-redirect.service.js";
 
 @Module({
   controllers: [
+    AccountDeletionController,
     AnalyticsOverviewController,
     HealthController,
     LinksController,
@@ -22,6 +25,7 @@ import { PublicRedirectService } from "./redirect/public-redirect.service.js";
     WorkspaceMembershipController,
   ],
   providers: [
+    AccountDeletionService,
     AnalyticsCaptureService,
     AnalyticsOverviewService,
     LinksService,
