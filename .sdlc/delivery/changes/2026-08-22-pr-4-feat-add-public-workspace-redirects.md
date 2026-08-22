@@ -20,7 +20,7 @@
 - Unknown, unpublished, malformed, cross-workspace, and permanently unsafe destinations return a
   generic `404` without `Location`. Transient DNS errors and redirect DNS capacity exhaustion
   return `503` with `Retry-After` and no `Location`.
-- Destination DNS resolves again for every redirect. Redirect validation has a separate two-second,
+- Destination DNS is revalidated for every redirect. Redirect validation has a separate two-second,
   ten-request capacity gate and only coalesces simultaneous checks for the same hostname.
 - No dependency or Prisma migration was added. Public redirect logs contain only a request ID,
   coarse outcome, status, and latency.
