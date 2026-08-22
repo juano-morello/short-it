@@ -53,12 +53,26 @@ describe("runWorkspaceLifecycleTransaction", () => {
   });
 
   it("retries a transaction timeout", async () => {
-    const transaction = vi.fn().mockRejectedValueOnce(transactionTimeout()).mockResolvedValueOnce("ok");
+    const transaction = vi
+      .fn()
+      .mockRejectedValueOnce(transactionTimeout())
+      .mockResolvedValueOnce("ok");
 
     await expect(
       runWorkspaceLifecycleTransaction({ $transaction: transaction } as never, async () => "done"),
     ).resolves.toBe("ok");
     expect(transaction).toHaveBeenCalledTimes(2);
+  });
+
+  it("retries a transaction-acquisition timeout", async () => {
+    const transaction = vi
+      .fn()
+      .mockRejectedValueOnce(transactionAcquisitionTimeout())
+      .mockResolvedValueOnce("ok");
+
+    await expect(
+      runWorkspaceLifecycleTransaction({ $transaction: transaction } as never, async () => "done"),
+    ).resolves.toBe("ok");
   });
 
   it("preserves a non-timeout transaction API fault", async () => {
@@ -87,4 +101,11 @@ function transactionTimeout(): Prisma.PrismaClientKnownRequestError {
     clientVersion: "test",
     code: "P2028",
   });
+}
+
+function transactionAcquisitionTimeout(): Prisma.PrismaClientKnownRequestError {
+  return new Prisma.PrismaClientKnownRequestError(
+    "Unable to start a transaction in the given time.",
+    { clientVersion: "test", code: "P2028" },
+  );
 }

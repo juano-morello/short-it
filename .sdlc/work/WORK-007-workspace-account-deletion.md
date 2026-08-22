@@ -57,8 +57,9 @@ Keep the organization deletion authority in Better Auth's static owner permissio
 requires a typed workspace handle before it calls that operation. A narrow NestJS workspace endpoint
 creates the organization and owner membership in one serializable transaction, and disables the
 native Better Auth create route. The account endpoint derives the user from the session, requires
-the matching session email, and performs its ownership check and user deletion in that same
-transactional lifecycle boundary. Neither endpoint accepts a user ID from the browser.
+the matching session email, and performs its ownership check and user deletion in its own
+serializable transaction using the same lifecycle policy. Neither endpoint accepts a user ID from
+the browser.
 
 ## Alternatives and tradeoffs
 
