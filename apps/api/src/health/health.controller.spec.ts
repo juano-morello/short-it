@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("../database.js", () => ({
   prisma: {
@@ -10,6 +10,8 @@ import { prisma } from "../database.js";
 import { HealthController } from "./health.controller.js";
 
 describe("HealthController", () => {
+  afterEach(() => vi.clearAllMocks());
+
   it("reports the process as healthy", () => {
     expect(new HealthController().health()).toEqual({
       status: "ok",
@@ -26,5 +28,12 @@ describe("HealthController", () => {
       database: "ready",
     });
     expect(prisma.$queryRaw).toHaveBeenCalledOnce();
+  });
+
+  it("does not report ready when PostgreSQL is unavailable", async () => {
+    const failure = new Error("PostgreSQL is unavailable");
+    vi.mocked(prisma.$queryRaw).mockRejectedValueOnce(failure);
+
+    await expect(new HealthController().ready()).rejects.toBe(failure);
   });
 });
