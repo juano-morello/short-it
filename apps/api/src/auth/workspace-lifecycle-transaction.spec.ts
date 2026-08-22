@@ -51,11 +51,27 @@ describe("runWorkspaceLifecycleTransaction", () => {
       ),
     );
   });
+
+  it("retries a transaction timeout", async () => {
+    const transaction = vi.fn().mockRejectedValueOnce(transactionTimeout()).mockResolvedValueOnce("ok");
+
+    await expect(
+      runWorkspaceLifecycleTransaction({ $transaction: transaction } as never, async () => "done"),
+    ).resolves.toBe("ok");
+    expect(transaction).toHaveBeenCalledTimes(2);
+  });
 });
 
 function serializationConflict(): Prisma.PrismaClientKnownRequestError {
   return new Prisma.PrismaClientKnownRequestError("serialization conflict", {
     clientVersion: "test",
     code: "P2034",
+  });
+}
+
+function transactionTimeout(): Prisma.PrismaClientKnownRequestError {
+  return new Prisma.PrismaClientKnownRequestError("transaction timeout", {
+    clientVersion: "test",
+    code: "P2028",
   });
 }

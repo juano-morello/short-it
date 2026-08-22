@@ -44,6 +44,22 @@ describe("WorkspaceLifecycleController", () => {
     ).rejects.toBeInstanceOf(UnauthorizedException);
   });
 
+  it("takes the authenticated user's workspace creation budget before creating", async () => {
+    const take = vi.fn();
+    const limitedController = new WorkspaceLifecycleController(
+      { create } as unknown as WorkspaceLifecycleService,
+      { take } as WorkspaceCreationRateLimiter,
+    );
+    vi.mocked(auth.api.getSession).mockResolvedValue({ user: { id: "user-1" } } as never);
+
+    await limitedController.createWorkspace(
+      { name: "Ada Studio", slug: "ada" },
+      request({ origin: "http://app.localhost:8080" }),
+    );
+
+    expect(take).toHaveBeenCalledWith("user-1");
+  });
+
   it("rejects requests outside the dashboard origin", async () => {
     await expect(
       controller.createWorkspace({}, request({ origin: "https://untrusted.example" })),
