@@ -48,7 +48,7 @@ describe("WorkspaceLifecycleController", () => {
     const take = vi.fn();
     const limitedController = new WorkspaceLifecycleController(
       { create } as unknown as WorkspaceLifecycleService,
-      { take } as WorkspaceCreationRateLimiter,
+      { take } as unknown as WorkspaceCreationRateLimiter,
     );
     vi.mocked(auth.api.getSession).mockResolvedValue({ user: { id: "user-1" } } as never);
 

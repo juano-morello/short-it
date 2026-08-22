@@ -25,9 +25,10 @@ account after resolving every workspace they own.
 - Add an authenticated, trusted-origin account-deletion endpoint that requires the signed-in email
   as confirmation and rejects callers who still own a workspace.
 - Create a workspace and its initial owner membership in one serializable application transaction.
-  The native Better Auth organization-create route is unavailable. Account deletion uses the same
-  transaction boundary for its owner check and user deletion. Retriable contention is bounded and
-  returns a retryable `503` only after all attempts are exhausted.
+  The native Better Auth organization-create route is unavailable. Account deletion uses its own
+  serializable transaction for its owner check and user deletion. The two operations use the same
+  retry policy. Retriable contention is bounded and returns a retryable `503` only after all
+  attempts are exhausted.
 - Existing database cascades remove the deleted user's sessions, credentials, and memberships;
   organization deletion cascades remove its links, invitations, and analytics.
 - Send the dashboard to onboarding after workspace deletion and to the signed-out landing screen

@@ -60,6 +60,19 @@ describe("runWorkspaceLifecycleTransaction", () => {
     ).resolves.toBe("ok");
     expect(transaction).toHaveBeenCalledTimes(2);
   });
+
+  it("preserves a non-timeout transaction API fault", async () => {
+    const failure = new Prisma.PrismaClientKnownRequestError("unsupported nested transaction", {
+      clientVersion: "test",
+      code: "P2028",
+    });
+    const transaction = vi.fn().mockRejectedValue(failure);
+
+    await expect(
+      runWorkspaceLifecycleTransaction({ $transaction: transaction } as never, async () => "done"),
+    ).rejects.toBe(failure);
+    expect(transaction).toHaveBeenCalledOnce();
+  });
 });
 
 function serializationConflict(): Prisma.PrismaClientKnownRequestError {

@@ -54,8 +54,9 @@ existing membership count inside that transaction. Better Auth's native organiza
 is unavailable. An in-process limit admits 100 authenticated workspace-create attempts per user per
 minute. Better Auth retains the static owner-authorized organization-delete route; the
 dashboard requires the workspace handle before calling it. Account deletion runs its owner check
-and user deletion in the same serializable lifecycle transaction. A concurrent workspace creation
-therefore either commits with its owner or aborts, never leaving an ownerless organization.
+and user deletion in its own serializable transaction. The two requests use the same isolation and
+retry policy, so a concurrent workspace creation either commits with its owner or aborts, never
+leaving an ownerless organization.
 The lifecycle transaction retries PostgreSQL serialization and timeout conflicts up to three times
 with bounded jitter. Exhaustion returns a retryable `503` and records a privacy-safe lifecycle event
 with request ID, outcome, and attempt count. The creation response exposes only the workspace ID,

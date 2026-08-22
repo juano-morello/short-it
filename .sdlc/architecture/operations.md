@@ -29,13 +29,13 @@ email addresses, workspace handles, record IDs, cookies, IP addresses, and user 
 production enables deletion, configure a dashboard and alert for deletion failures and an unusual
 rejection rate, retaining these operational logs under the environment's approved log policy.
 
-Workspace creation and account deletion share a serializable lifecycle transaction. On a PostgreSQL
-serialization or transaction-timeout conflict, it retries no more than three times with bounded
-jitter. The `workspace_lifecycle_transaction` event records only request ID, outcome, and attempt
-count. A `temporarily_unavailable` outcome corresponds to a retryable `503`. Before production,
-chart retrying and temporarily unavailable outcomes, and investigate five temporarily unavailable
-outcomes in five minutes with database saturation and lock-wait telemetry. No personal, workspace,
-or network identifiers belong in this event.
+Workspace creation and account deletion use separate serializable transactions with the same lifecycle
+policy. On a PostgreSQL serialization or positively identified transaction-timeout conflict, each
+retries no more than three times with bounded jitter. The `workspace_lifecycle_transaction` event
+records only request ID, outcome, and attempt count. A `temporarily_unavailable` outcome corresponds
+to a retryable `503`. Before production, chart retrying and temporarily unavailable outcomes, and
+investigate five temporarily unavailable outcomes in five minutes with database saturation and
+lock-wait telemetry. No personal, workspace, or network identifiers belong in this event.
 
 The API must emit structured, privacy-safe logs with request IDs. It must not log raw IPs,
 raw user agents, session tokens, invitation URLs, or destination query strings. Product
