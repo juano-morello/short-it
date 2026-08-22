@@ -18,6 +18,7 @@
     "bdd:invitation-edge": "pnpm --filter @short-it/api bdd:invitation-edge",
     "bdd:publication-guardrails": "pnpm --filter @short-it/api bdd:publication-guardrails",
     "bdd:rate-limit": "pnpm --filter @short-it/api bdd:rate-limit",
+    "bdd:workspace-lifecycle": "pnpm --filter @short-it/api bdd:workspace-lifecycle",
     "e2e": "turbo e2e",
     "coverage": "turbo coverage",
     "typecheck": "turbo typecheck",

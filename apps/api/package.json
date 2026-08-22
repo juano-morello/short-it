@@ -15,6 +15,7 @@
     "bdd:invitation-edge": "node scripts/run-bdd.mjs invitation-edge",
     "bdd:publication-guardrails": "node scripts/run-bdd.mjs publication-guardrails",
     "bdd:rate-limit": "node scripts/run-bdd.mjs rate-limit",
+    "bdd:workspace-lifecycle": "node scripts/run-bdd.mjs workspace-lifecycle",
     "analytics:prune": "tsx src/analytics/prune-analytics.ts",
     "invitations:prune": "tsx src/auth/prune-invitations.ts",
     "invitations:prune:production": "node dist/auth/prune-invitations.js",
