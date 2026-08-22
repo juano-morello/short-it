@@ -1,5 +1,4 @@
 import { ForbiddenException } from "@nestjs/common";
-import { AnalyticsDimension } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
 import { AnalyticsOverviewService, getOverviewStart } from "./analytics-overview.service.js";
 
@@ -10,19 +9,26 @@ describe("AnalyticsOverviewService", () => {
     };
     const analyticsDatabase = {
       linkAnalyticsDaily: {
-        findMany: vi.fn().mockResolvedValue([
-          { clicks: 2, day: new Date("2026-08-22T00:00:00.000Z"), uniqueVisitors: 1 },
-          { clicks: 3, day: new Date("2026-08-22T00:00:00.000Z"), uniqueVisitors: 2 },
-          { clicks: 4, day: new Date("2026-08-21T00:00:00.000Z"), uniqueVisitors: 4 },
+        groupBy: vi.fn().mockResolvedValue([
+          {
+            _sum: { clicks: 5, uniqueVisitors: 3 },
+            day: new Date("2026-08-22T00:00:00.000Z"),
+          },
+          {
+            _sum: { clicks: 4, uniqueVisitors: 4 },
+            day: new Date("2026-08-21T00:00:00.000Z"),
+          },
         ]),
       },
       linkAnalyticsDimensionDaily: {
-        findMany: vi.fn().mockResolvedValue([
-          { clicks: 5, dimension: AnalyticsDimension.COUNTRY, value: "Unknown" },
-          { clicks: 4, dimension: AnalyticsDimension.DEVICE, value: "desktop" },
-          { clicks: 1, dimension: AnalyticsDimension.DEVICE, value: "mobile" },
-          { clicks: 3, dimension: AnalyticsDimension.REFERRER, value: "source.example" },
-        ]),
+        groupBy: vi
+          .fn()
+          .mockResolvedValueOnce([{ _sum: { clicks: 5 }, value: "Unknown" }])
+          .mockResolvedValueOnce([
+            { _sum: { clicks: 4 }, value: "desktop" },
+            { _sum: { clicks: 1 }, value: "mobile" },
+          ])
+          .mockResolvedValueOnce([{ _sum: { clicks: 3 }, value: "source.example" }]),
       },
     };
     const service = AnalyticsOverviewService.forTesting({
@@ -51,18 +57,43 @@ describe("AnalyticsOverviewService", () => {
       select: { role: true },
       where: { organizationId_userId: { organizationId: "workspace-1", userId: "analyst-1" } },
     });
-    expect(analyticsDatabase.linkAnalyticsDaily.findMany).toHaveBeenCalledWith(
+    expect(analyticsDatabase.linkAnalyticsDaily.groupBy).toHaveBeenCalledWith(
       expect.objectContaining({
         where: {
-          day: { gte: new Date("2025-08-23T00:00:00.000Z") },
+          day: { gte: new Date("2025-08-22T00:00:00.000Z") },
           organizationId: "workspace-1",
         },
       }),
     );
-    expect(analyticsDatabase.linkAnalyticsDimensionDaily.findMany).toHaveBeenCalledWith(
+    expect(analyticsDatabase.linkAnalyticsDimensionDaily.groupBy).toHaveBeenCalledTimes(3);
+    expect(analyticsDatabase.linkAnalyticsDimensionDaily.groupBy).toHaveBeenNthCalledWith(
+      1,
       expect.objectContaining({
         where: {
-          day: { gte: new Date("2025-08-23T00:00:00.000Z") },
+          day: { gte: new Date("2025-08-22T00:00:00.000Z") },
+          dimension: "COUNTRY",
+          organizationId: "workspace-1",
+        },
+      }),
+    );
+    expect(analyticsDatabase.linkAnalyticsDimensionDaily.groupBy).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        take: 5,
+        where: {
+          day: { gte: new Date("2025-08-22T00:00:00.000Z") },
+          dimension: "DEVICE",
+          organizationId: "workspace-1",
+        },
+      }),
+    );
+    expect(analyticsDatabase.linkAnalyticsDimensionDaily.groupBy).toHaveBeenNthCalledWith(
+      3,
+      expect.objectContaining({
+        take: 5,
+        where: {
+          day: { gte: new Date("2025-08-22T00:00:00.000Z") },
+          dimension: "REFERRER",
           organizationId: "workspace-1",
         },
       }),
@@ -84,9 +115,9 @@ describe("AnalyticsOverviewService", () => {
     );
   });
 
-  it("uses a 365-day inclusive reporting window", () => {
+  it("uses the same twelve-calendar-month window as aggregate retention", () => {
     expect(getOverviewStart(new Date("2026-08-22T12:00:00.000Z"))).toEqual(
-      new Date("2025-08-23T00:00:00.000Z"),
+      new Date("2025-08-22T00:00:00.000Z"),
     );
   });
 });

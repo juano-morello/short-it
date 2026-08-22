@@ -376,6 +376,93 @@ describe("PostgreSQL integration", () => {
     ).resolves.toBeNull();
   });
 
+  it("keeps the referrer-host cap under concurrent captures for one link day", async () => {
+    await testPrisma.organization.create({
+      data: {
+        id: "concurrent-referrer-workspace",
+        name: "Concurrent Referrer Workspace",
+        slug: "concurrent-referrer-workspace",
+      },
+    });
+    const link = await testPrisma.link.create({
+      data: {
+        destinationUrl: "https://public.example/concurrent-referrers",
+        organizationId: "concurrent-referrer-workspace",
+        publishedAt: new Date(),
+      },
+    });
+    const day = new Date("2026-08-22T00:00:00.000Z");
+    await testPrisma.linkAnalyticsDaily.create({
+      data: { clicks: 99, day, linkId: link.id, organizationId: "concurrent-referrer-workspace" },
+    });
+    await testPrisma.linkAnalyticsDimensionDaily.createMany({
+      data: Array.from({ length: 99 }, (_, index) => ({
+        clicks: 1,
+        day,
+        dimension: "REFERRER" as const,
+        linkId: link.id,
+        organizationId: "concurrent-referrer-workspace",
+        value: `source-${index}.example`,
+      })),
+    });
+    const capture = AnalyticsCaptureService.forTesting({
+      database: testPrisma as never,
+      now: () => new Date("2026-08-22T11:00:00.000Z"),
+      visitorSecret: "analytics-secret-for-integration-tests-only",
+    });
+
+    for (const [index, host] of ["source-99.example", "source-100.example"].entries()) {
+      expect(
+        capture.tryCapture({
+          ipAddress: `203.0.113.${60 + index}`,
+          linkId: link.id,
+          organizationId: "concurrent-referrer-workspace",
+          referrer: `https://${host}/path`,
+          requestId: `concurrent-referrer-${index}`,
+          userAgent: "Mozilla/5.0",
+        }),
+      ).toBe(true);
+    }
+
+    await vi.waitFor(async () => {
+      await expect(
+        testPrisma.linkAnalyticsDaily.findUniqueOrThrow({
+          where: {
+            organizationId_linkId_day: {
+              day,
+              linkId: link.id,
+              organizationId: "concurrent-referrer-workspace",
+            },
+          },
+        }),
+      ).resolves.toMatchObject({ clicks: 101 });
+    });
+    await expect(
+      testPrisma.linkAnalyticsDimensionDaily.count({
+        where: {
+          day,
+          dimension: "REFERRER",
+          linkId: link.id,
+          organizationId: "concurrent-referrer-workspace",
+          value: { notIn: ["direct", "other", "unknown"] },
+        },
+      }),
+    ).resolves.toBe(100);
+    await expect(
+      testPrisma.linkAnalyticsDimensionDaily.findUnique({
+        where: {
+          organizationId_linkId_day_dimension_value: {
+            day,
+            dimension: "REFERRER",
+            linkId: link.id,
+            organizationId: "concurrent-referrer-workspace",
+            value: "other",
+          },
+        },
+      }),
+    ).resolves.toMatchObject({ clicks: 1 });
+  });
+
   it("prunes expired visitor state and aggregate days older than twelve months idempotently", async () => {
     await testPrisma.organization.create({
       data: {
@@ -437,5 +524,100 @@ describe("PostgreSQL integration", () => {
     await expect(
       pruneAnalytics(testPrisma as never, new Date("2026-08-22T10:00:00.000Z")),
     ).resolves.toEqual({ expiredAggregates: 0, expiredVisitors: 0 });
+  });
+
+  it("retains a daily visitor digest through UTC midnight and removes it within the cleanup grace", async () => {
+    await testPrisma.organization.create({
+      data: {
+        id: "visitor-cleanup-workspace",
+        name: "Visitor Cleanup Workspace",
+        slug: "visitor-cleanup-workspace",
+      },
+    });
+    const link = await testPrisma.link.create({
+      data: {
+        destinationUrl: "https://public.example/visitor-cleanup",
+        organizationId: "visitor-cleanup-workspace",
+        publishedAt: new Date(),
+      },
+    });
+    const day = new Date("2026-08-22T00:00:00.000Z");
+    await testPrisma.linkAnalyticsDaily.create({
+      data: { day, linkId: link.id, organizationId: "visitor-cleanup-workspace" },
+    });
+    await testPrisma.linkAnalyticsVisitor.create({
+      data: {
+        day,
+        expiresAt: new Date("2026-08-23T00:00:00.000Z"),
+        linkId: link.id,
+        organizationId: "visitor-cleanup-workspace",
+        visitorDigest: "c".repeat(64),
+      },
+    });
+
+    await expect(
+      pruneAnalytics(testPrisma as never, new Date("2026-08-22T23:59:59.999Z")),
+    ).resolves.toEqual({ expiredAggregates: 0, expiredVisitors: 0 });
+    await expect(
+      testPrisma.linkAnalyticsVisitor.count({
+        where: { linkId: link.id, organizationId: "visitor-cleanup-workspace" },
+      }),
+    ).resolves.toBe(1);
+    await expect(
+      pruneAnalytics(testPrisma as never, new Date("2026-08-23T00:05:00.000Z")),
+    ).resolves.toEqual(expect.objectContaining({ expiredVisitors: expect.any(Number) }));
+    await expect(
+      testPrisma.linkAnalyticsVisitor.count({
+        where: { linkId: link.id, organizationId: "visitor-cleanup-workspace" },
+      }),
+    ).resolves.toBe(0);
+  });
+
+  it("runs the prune command against an isolated PostgreSQL database", async () => {
+    await testPrisma.organization.create({
+      data: { id: "prune-command-workspace", name: "Prune Command", slug: "prune-command" },
+    });
+    const link = await testPrisma.link.create({
+      data: {
+        destinationUrl: "https://public.example/prune-command",
+        organizationId: "prune-command-workspace",
+        publishedAt: new Date(),
+      },
+    });
+    const oldDay = new Date("2020-01-01T00:00:00.000Z");
+    await testPrisma.linkAnalyticsDaily.create({
+      data: { day: oldDay, linkId: link.id, organizationId: "prune-command-workspace" },
+    });
+    await testPrisma.linkAnalyticsVisitor.create({
+      data: {
+        day: oldDay,
+        expiresAt: new Date("2020-01-02T00:00:00.000Z"),
+        linkId: link.id,
+        organizationId: "prune-command-workspace",
+        visitorDigest: "b".repeat(64),
+      },
+    });
+
+    const output = execFileSync("pnpm", ["exec", "tsx", "src/analytics/prune-analytics.ts"], {
+      cwd: process.cwd(),
+      env: { ...process.env, DATABASE_URL: container.getConnectionUri() },
+      encoding: "utf8",
+    });
+    expect(JSON.parse(output.trim())).toMatchObject({
+      event: "redirect_analytics_pruned",
+      expiredAggregates: 1,
+      expiredVisitors: 1,
+    });
+    await expect(
+      testPrisma.linkAnalyticsDaily.findUnique({
+        where: {
+          organizationId_linkId_day: {
+            day: oldDay,
+            linkId: link.id,
+            organizationId: "prune-command-workspace",
+          },
+        },
+      }),
+    ).resolves.toBeNull();
   });
 });

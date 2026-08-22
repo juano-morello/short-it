@@ -6,7 +6,8 @@ Core product slices use executable Gherkin. The scaffold begins with the health-
 WORK-002 covers registration, workspace ownership, safe handle creation, and isolated rate-limit
 behavior. WORK-003 covers server-generated CUID link publication, destination safety, and
 tenant-scoped authorization. WORK-004 covers public-host redirects, redirect-time destination
-validation, and tenant-route isolation. Future slices cover analytics and deletion lifecycle.
+validation, and tenant-route isolation. WORK-005 covers privacy-preserving redirect analytics,
+authenticated workspace reporting, and aggregate retention. A future slice covers deletion lifecycle.
 
 ## Outside-in TDD workflow
 
@@ -33,7 +34,9 @@ reserved for a future public or cross-client API.
 Playwright owns browser flows. WORK-002 adds a real browser scenario that registers an account,
 signs in, creates a workspace, and verifies the owner dashboard. WORK-004 creates a published link,
 checks its public redirect response, and proves a dashboard cookie is not sent to the tenant host.
-Storybook documents dashboard components and supports future visual checks.
+WORK-005 follows a public redirect through to the dashboard's aggregate analytics view and waits for
+best-effort persistence before asserting presentation. Storybook documents dashboard components and
+supports future visual checks.
 
 ## Test data and isolation
 
@@ -51,15 +54,16 @@ instead verified through the live Compose migration, probe, signup, and browser 
 ## Performance and resilience
 
 WORK-004 tests redirect-time DNS revalidation, family-resolution failures, timeout, capacity
-exhaustion, and concurrent same-host coalescing. Before analytics ships, test valid redirects when
-telemetry, aggregation, and optional enrichment fail. Load and latency targets are deferred until
-hosting is selected.
+exhaustion, and concurrent same-host coalescing. WORK-005 tests valid redirects when analytics
+persistence is blocked, bounded capture admission, same-day digest deduplication, referrer capping
+under concurrency, aggregate retention, and dashboard reporting. Load and latency targets are
+deferred until hosting is selected.
 
 ## CI gates and exact commands
 
 Run `pnpm format:check`, `pnpm lint`, `pnpm typecheck`, `pnpm test`,
-`pnpm test:integration`, `pnpm bdd`, `pnpm bdd:publication-guardrails`, `pnpm bdd:rate-limit`,
-`pnpm e2e`, `pnpm coverage`,
+`pnpm test:integration`, `pnpm bdd`, `pnpm bdd:analytics`,
+`pnpm bdd:publication-guardrails`, `pnpm bdd:rate-limit`, `pnpm e2e`, `pnpm coverage`,
 `pnpm db:validate`, `pnpm storybook:build`, `pnpm compose:config`,
 `pnpm docker:build`, and `pnpm security`.
 

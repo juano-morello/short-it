@@ -14,7 +14,7 @@ Feature: Privacy-preserving redirect analytics
     And redirect analytics do not retain raw visitor identifiers
 
   @analytics-overview
-  Scenario: An analyst can read only their workspace aggregate overview
+  Scenario: An analyst can read their workspace aggregate overview but not another workspace's
     Given a signed-in analyst has workspace analytics
     When the analyst requests the workspace analytics overview
     Then the analyst receives only aggregate analytics for that workspace

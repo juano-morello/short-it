@@ -17,15 +17,16 @@ redirect when analytics storage, enrichment, or capacity is unavailable.
   device category.
 - NFR: redirect availability takes precedence over analytics persistence.
 - NFR: raw IP addresses and raw user-agent strings are never persisted or logged.
-- NFR: daily visitor identifiers expire within 24 hours and aggregates expire after 12 months.
+- NFR: daily visitor identifiers expire at the next UTC midnight and are physically removed
+  within a bounded five-minute cleanup grace. Aggregates expire after 12 months.
 
 ## Scope
 
 - Add a Prisma migration for per-link daily totals, daily unique-visitor state, and aggregate
   country, device-category, and referrer-host dimensions.
 - Derive a keyed daily visitor digest from the dedicated client-IP header that Caddy overwrites on
-  public-link traffic. Store the digest until the next UTC midnight, for no more than 24 hours;
-  never persist the source IP.
+  public-link traffic. Store the digest through the next UTC midnight, then physically remove it
+  within a bounded five-minute cleanup grace. Never persist the source IP.
 - Derive a coarse device category from the request user-agent in memory. Normalize an HTTP(S)
   referrer to its hostname only; do not persist a raw referrer URL.
 - Record `Unknown` country in every launch environment. A later production-only change may accept
@@ -58,7 +59,8 @@ this work item.
   session value. Local capture records `Unknown` country.
 - An authorized owner, editor, or analyst can view only their workspace's analytics. A different
   workspace or non-member receives no analytics data.
-- The prune command removes expired visitor state and aggregates older than 12 months.
+- The prune command removes visitor state within the bounded cleanup grace and aggregates older
+  than 12 months.
 
 ## Proposed approach
 
@@ -85,6 +87,8 @@ Analytics are intentionally approximate during persistence failures or saturatio
 capture gate does not coordinate across API instances, so a shared limiter or queue is required
 before multi-instance production. Production must keep Caddy, or an equivalent authenticated edge,
 as the sole source of the dedicated public client-IP header and must schedule the prune command.
+The production operator must run pruning at least every five minutes. Any prune failure is an
+immediate retention breach alert; no successful prune event for ten minutes raises a second alert.
 The visitor secret is required in production and must remain independent from authentication
 secrets. No new dependency is proposed.
 

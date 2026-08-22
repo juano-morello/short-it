@@ -125,4 +125,18 @@ Then("the analyst receives only aggregate analytics for that workspace", async (
   ]);
   assert.deepEqual(body.breakdowns.countries, [{ clicks: 3, value: "Unknown" }]);
   assert.equal(JSON.stringify(body).includes(analyticsWorkspace.linkId), false);
+
+  const otherWorkspaceId = `other-analytics-${randomUUID().replaceAll("-", "").slice(0, 12)}`;
+  await prisma.organization.create({
+    data: {
+      id: otherWorkspaceId,
+      name: "Other Analytics Workspace",
+      slug: `other-analytics-${randomUUID().replaceAll("-", "").slice(0, 12)}`,
+    },
+  });
+  const otherWorkspaceResponse = await fetch(
+    `${baseUrl}/api/organizations/${otherWorkspaceId}/analytics`,
+    { headers: { cookie: analyticsWorkspace.cookie, ...dashboardHostHeader } },
+  );
+  assert.equal(otherWorkspaceResponse.status, 403);
 });

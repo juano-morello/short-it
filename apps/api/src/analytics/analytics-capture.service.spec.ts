@@ -43,12 +43,9 @@ describe("AnalyticsCaptureService", () => {
       }),
     ).toBe(false);
     expect(log).toHaveBeenCalledWith(
-      JSON.stringify({
-        event: "redirect_analytics",
-        outcome: "dropped_capacity",
-        requestId: "dropped-request",
-        status: 302,
-      }),
+      expect.stringMatching(
+        /"durationMs":\d+.*"event":"redirect_analytics".*"outcome":"dropped_capacity".*"requestId":"dropped-request".*"status":302/,
+      ),
     );
 
     await vi.waitFor(() => expect(database.$transaction).toHaveBeenCalledTimes(20));
@@ -81,12 +78,9 @@ describe("AnalyticsCaptureService", () => {
 
     await vi.waitFor(() =>
       expect(log).toHaveBeenCalledWith(
-        JSON.stringify({
-          event: "redirect_analytics",
-          outcome: "failed",
-          requestId: "failed-capture-request",
-          status: 302,
-        }),
+        expect.stringMatching(
+          /"durationMs":\d+.*"event":"redirect_analytics".*"outcome":"failed".*"requestId":"failed-capture-request".*"status":302/,
+        ),
       ),
     );
     log.mockRestore();

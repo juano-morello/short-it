@@ -30,7 +30,22 @@ test("a workspace member sees privacy-preserving redirect aggregates", async ({ 
   });
   expect(redirect.status()).toBe(302);
 
-  await page.reload();
+  await expect
+    .poll(async () => {
+      const overviewResponse = page.waitForResponse(
+        (response) =>
+          response.request().method() === "GET" &&
+          response.url().includes(`/api/organizations/`) &&
+          response.url().endsWith("/analytics") &&
+          response.status() === 200,
+      );
+      await page.reload();
+      const overview = (await (await overviewResponse).json()) as {
+        breakdowns: { countries: Array<{ value: string }> };
+      };
+      return overview.breakdowns.countries.some((country) => country.value === "Unknown");
+    })
+    .toBe(true);
 
   await expect(page.getByRole("heading", { name: "Redirect performance" })).toBeVisible();
   await expect(page.getByText("TOTAL CLICKS")).toBeVisible();

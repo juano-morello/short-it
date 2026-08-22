@@ -2,9 +2,7 @@ import { ForbiddenException, Injectable } from "@nestjs/common";
 import { AnalyticsDimension } from "@prisma/client";
 import { canReadAnalytics } from "../auth/access-control.js";
 import { analyticsPrisma, prisma } from "../database.js";
-import { getAnalyticsDay } from "./analytics-policy.js";
-
-const OVERVIEW_DAYS = 365;
+import { getAggregateRetentionStart } from "./analytics-retention.js";
 
 type MembershipDatabase = Pick<typeof prisma, "member">;
 type OverviewDatabase = Pick<
@@ -54,54 +52,48 @@ export class AnalyticsOverviewService {
     }
 
     const since = getOverviewStart(this.dependencies.now());
-    const [dailyRows, dimensionRows] = await Promise.all([
-      this.dependencies.analyticsDatabase.linkAnalyticsDaily.findMany({
-        select: { clicks: true, day: true, uniqueVisitors: true },
+    const [dailyRows, countries, devices, referrers] = await Promise.all([
+      this.dependencies.analyticsDatabase.linkAnalyticsDaily.groupBy({
+        _sum: { clicks: true, uniqueVisitors: true },
+        by: ["day"],
+        orderBy: { day: "desc" },
         where: { day: { gte: since }, organizationId: input.organizationId },
       }),
-      this.dependencies.analyticsDatabase.linkAnalyticsDimensionDaily.findMany({
-        select: { clicks: true, dimension: true, value: true },
-        where: { day: { gte: since }, organizationId: input.organizationId },
-      }),
+      this.getTopDimensions(input.organizationId, since, AnalyticsDimension.COUNTRY),
+      this.getTopDimensions(input.organizationId, since, AnalyticsDimension.DEVICE),
+      this.getTopDimensions(input.organizationId, since, AnalyticsDimension.REFERRER),
     ]);
 
-    const daily = new Map<string, { clicks: number; dailyUniqueLinkVisitors: number }>();
-    for (const row of dailyRows) {
-      const date = row.day.toISOString().slice(0, 10);
-      const current = daily.get(date) ?? { clicks: 0, dailyUniqueLinkVisitors: 0 };
-      current.clicks += row.clicks;
-      current.dailyUniqueLinkVisitors += row.uniqueVisitors;
-      daily.set(date, current);
-    }
-
     return {
-      breakdowns: {
-        countries: summarizeDimensions(dimensionRows, AnalyticsDimension.COUNTRY),
-        devices: summarizeDimensions(dimensionRows, AnalyticsDimension.DEVICE),
-        referrers: summarizeDimensions(dimensionRows, AnalyticsDimension.REFERRER),
-      },
-      daily: [...daily.entries()]
-        .map(([date, values]) => ({ date, ...values }))
-        .sort((left, right) => right.date.localeCompare(left.date)),
+      breakdowns: { countries, devices, referrers },
+      daily: dailyRows.map((row) => ({
+        clicks: row._sum.clicks ?? 0,
+        dailyUniqueLinkVisitors: row._sum.uniqueVisitors ?? 0,
+        date: row.day.toISOString().slice(0, 10),
+      })),
     };
+  }
+
+  private async getTopDimensions(
+    organizationId: string,
+    since: Date,
+    dimension: AnalyticsDimension,
+  ): Promise<Array<{ clicks: number; value: string }>> {
+    const rows = await this.dependencies.analyticsDatabase.linkAnalyticsDimensionDaily.groupBy({
+      _sum: { clicks: true },
+      by: ["value"],
+      orderBy: [{ _sum: { clicks: "desc" } }, { value: "asc" }],
+      take: 5,
+      where: {
+        day: { gte: since },
+        dimension,
+        organizationId,
+      },
+    });
+    return rows.map((row) => ({ clicks: row._sum.clicks ?? 0, value: row.value }));
   }
 }
 
 export function getOverviewStart(now: Date): Date {
-  const today = getAnalyticsDay(now);
-  return new Date(today.getTime() - (OVERVIEW_DAYS - 1) * 24 * 60 * 60 * 1000);
-}
-
-function summarizeDimensions(
-  rows: Array<{ clicks: number; dimension: AnalyticsDimension; value: string }>,
-  dimension: AnalyticsDimension,
-) {
-  const values = new Map<string, number>();
-  for (const row of rows) {
-    if (row.dimension !== dimension) continue;
-    values.set(row.value, (values.get(row.value) ?? 0) + row.clicks);
-  }
-  return [...values.entries()]
-    .map(([value, clicks]) => ({ clicks, value }))
-    .sort((left, right) => right.clicks - left.clicks || left.value.localeCompare(right.value));
+  return getAggregateRetentionStart(now);
 }

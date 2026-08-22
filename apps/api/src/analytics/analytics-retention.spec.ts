@@ -8,6 +8,12 @@ describe("analytics retention", () => {
     );
   });
 
+  it("uses the final valid day when a leap-day window crosses into a non-leap year", () => {
+    expect(getAggregateRetentionStart(new Date("2028-02-29T10:00:00.000Z"))).toEqual(
+      new Date("2027-02-28T00:00:00.000Z"),
+    );
+  });
+
   it("can run again after all eligible records have been removed", async () => {
     const database = {
       linkAnalyticsDaily: {

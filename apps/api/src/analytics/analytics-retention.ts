@@ -7,9 +7,13 @@ type AnalyticsPruneDatabase = Pick<
 >;
 
 export function getAggregateRetentionStart(now: Date): Date {
-  const start = getAnalyticsDay(now);
-  start.setUTCMonth(start.getUTCMonth() - 12);
-  return start;
+  const day = getAnalyticsDay(now);
+  const targetYear = day.getUTCFullYear() - 1;
+  const targetMonth = day.getUTCMonth();
+  const lastDayOfTargetMonth = new Date(Date.UTC(targetYear, targetMonth + 1, 0)).getUTCDate();
+  return new Date(
+    Date.UTC(targetYear, targetMonth, Math.min(day.getUTCDate(), lastDayOfTargetMonth)),
+  );
 }
 
 export async function pruneAnalytics(

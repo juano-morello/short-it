@@ -24,14 +24,16 @@ redirects were rejected.
 ## Decision
 
 Treat redirect resolution as the critical path. Attempt analytics asynchronously or in a
-failure-isolated path. Derive a keyed daily visitor identifier from the request IP, expire it
-within 24 hours, and retain aggregate metrics for 12 months.
+failure-isolated path. Derive a keyed daily visitor identifier from the request IP, expire it at
+the next UTC midnight, and physically remove it within a bounded five-minute cleanup grace.
+Retain aggregate metrics for 12 months.
 
 ## Consequences and tradeoffs
 
 The product can accurately state daily unique visitors but cannot promise a cross-day,
-lifetime unique-person metric. Country and device classification must avoid preserving raw
-input values.
+lifetime unique-person metric. The cleanup grace preserves full UTC-day deduplication while
+bounding identifier storage. Country and device classification must avoid preserving raw input
+values.
 
 ## Verification
 

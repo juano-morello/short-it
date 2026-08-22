@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-  AnalyticsCaptureGate,
   classifyDevice,
   createDailyVisitorDigest,
   getAnalyticsDay,
@@ -77,20 +76,5 @@ describe("redirect analytics policy", () => {
     expect(normalizeTrustedIp("2001:db8::1")).toBe("2001:db8::1");
     expect(normalizeTrustedIp("203.0.113.40, attacker")).toBeUndefined();
     expect(normalizeTrustedIp(undefined)).toBeUndefined();
-  });
-
-  it("drops capture work above its independent concurrency limit", async () => {
-    const gate = new AnalyticsCaptureGate(1);
-    let releaseFirst: (() => void) | undefined;
-    const first = gate.run(
-      () =>
-        new Promise<void>((resolve) => {
-          releaseFirst = resolve;
-        }),
-    );
-
-    await expect(gate.run(async () => undefined)).resolves.toBe(false);
-    releaseFirst?.();
-    await expect(first).resolves.toBe(true);
   });
 });

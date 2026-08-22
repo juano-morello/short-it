@@ -16,8 +16,8 @@
 ## Nonfunctional
 
 - Redirect-first: analytics persistence failures must not block a valid redirect.
-- Aggregate analytics retention is 12 months. The per-day visitor identifier expires within
-  24 hours.
+- Aggregate analytics retention is 12 months. The per-day visitor identifier expires at the next
+  UTC midnight and is physically removed within a bounded five-minute cleanup grace.
 - The dashboard labels daily uniqueness precisely and does not claim a lifetime unique-person
   count.
 - URLs accept HTTP or HTTPS only and reject localhost, private network, and non-web targets.

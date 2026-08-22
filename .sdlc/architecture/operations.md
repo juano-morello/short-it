@@ -71,8 +71,13 @@ or multiple API instances.
 Redirect analytics use a separate PostgreSQL pool capped at two connections and an in-process
 20-capture gate. Capture runs only after a successful `GET` response ends; `HEAD` redirects do not
 count. Per link and UTC day, no more than 100 distinct referrer hosts are retained, with further
-hosts grouped as `other`. Schedule `pnpm --filter @short-it/api analytics:prune` before production
-to remove expired daily visitor digests and aggregates older than 12 months.
+hosts grouped as `other`. Before production, the production operator must run
+`pnpm --filter @short-it/api analytics:prune` at least every five minutes, alert on any
+`redirect_analytics_prune_failed` event, and alert if no
+`redirect_analytics_pruned` event arrives for ten minutes. A failed prune is a retention breach:
+the operator must restore a successful run before the five-minute cleanup grace elapses. This
+schedule is required to physically remove expired daily visitor digests; expiry metadata alone does
+not delete rows.
 
 ## Migrations and rollback
 

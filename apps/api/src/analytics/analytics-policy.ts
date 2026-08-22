@@ -61,21 +61,3 @@ export function normalizeReferrerHost(referrer: string | undefined): string {
 export function normalizeTrustedIp(value: string | undefined): string | undefined {
   return value && isIP(value) !== 0 ? value : undefined;
 }
-
-export class AnalyticsCaptureGate {
-  private active = 0;
-
-  constructor(private readonly limit: number) {}
-
-  async run(task: () => Promise<void>): Promise<boolean> {
-    if (this.active >= this.limit) return false;
-
-    this.active += 1;
-    try {
-      await task();
-      return true;
-    } finally {
-      this.active -= 1;
-    }
-  }
-}

@@ -60,8 +60,9 @@ export class AnalyticsCaptureService {
   }
 
   tryCapture(input: AnalyticsCaptureInput): boolean {
+    const startedAt = performance.now();
     if (this.activeCaptures >= MAX_CONCURRENT_CAPTURES) {
-      this.logOutcome("dropped_capacity", input.requestId);
+      this.logOutcome("dropped_capacity", input.requestId, startedAt);
       return false;
     }
 
@@ -71,13 +72,13 @@ export class AnalyticsCaptureService {
       capture = this.sanitize(input);
     } catch {
       this.activeCaptures -= 1;
-      this.logOutcome("failed", input.requestId);
+      this.logOutcome("failed", input.requestId, startedAt);
       return false;
     }
     void Promise.resolve()
       .then(async () => this.persist(capture))
-      .then(() => this.logOutcome("captured", capture.requestId))
-      .catch(() => this.logOutcome("failed", capture.requestId))
+      .then(() => this.logOutcome("captured", capture.requestId, startedAt))
+      .catch(() => this.logOutcome("failed", capture.requestId, startedAt))
       .finally(() => {
         this.activeCaptures -= 1;
       });
@@ -233,9 +234,19 @@ export class AnalyticsCaptureService {
     });
   }
 
-  private logOutcome(outcome: "captured" | "dropped_capacity" | "failed", requestId: string): void {
+  private logOutcome(
+    outcome: "captured" | "dropped_capacity" | "failed",
+    requestId: string,
+    startedAt: number,
+  ): void {
     this.logger.log(
-      JSON.stringify({ event: "redirect_analytics", outcome, requestId, status: 302 }),
+      JSON.stringify({
+        durationMs: Math.round(performance.now() - startedAt),
+        event: "redirect_analytics",
+        outcome,
+        requestId,
+        status: 302,
+      }),
     );
   }
 }

@@ -40,6 +40,11 @@ jobs:
       - name: Wait for the local API
         run: bash scripts/wait-for-local-stack.sh
       - run: BDD_BASE_URL=http://app.localhost:8080 pnpm bdd
+      - name: Restart the local API for analytics overview
+        run: docker compose restart api
+      - name: Wait for the local API before analytics overview
+        run: bash scripts/wait-for-local-stack.sh
+      - run: BDD_BASE_URL=http://app.localhost:8080 pnpm bdd:analytics
       - name: Restart the local API for publication guardrails
         run: docker compose restart api
       - name: Wait for the local API before publication guardrails

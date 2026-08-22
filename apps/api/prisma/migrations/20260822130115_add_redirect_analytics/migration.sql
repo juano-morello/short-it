@@ -1,123 +1,56 @@
--- DropForeignKey
-ALTER TABLE "Account" DROP CONSTRAINT "Account_userId_fkey";
+CREATE TYPE "AnalyticsDimension" AS ENUM ('COUNTRY', 'DEVICE', 'REFERRER');
 
--- DropForeignKey
-ALTER TABLE "Invitation" DROP CONSTRAINT "Invitation_organizationId_fkey";
-
--- DropForeignKey
-ALTER TABLE "Link" DROP CONSTRAINT "Link_organizationId_fkey";
-
--- DropForeignKey
-ALTER TABLE "Member" DROP CONSTRAINT "Member_organizationId_fkey";
-
--- DropForeignKey
-ALTER TABLE "Member" DROP CONSTRAINT "Member_userId_fkey";
-
--- DropForeignKey
-ALTER TABLE "Session" DROP CONSTRAINT "Session_userId_fkey";
-
--- CreateTable
-CREATE TABLE "LinkAnalyticsDay" (
-    "id" TEXT NOT NULL,
+CREATE TABLE "LinkAnalyticsDaily" (
     "organizationId" TEXT NOT NULL,
     "linkId" TEXT NOT NULL,
-    "day" TIMESTAMP(3) NOT NULL,
+    "day" DATE NOT NULL,
     "clicks" INTEGER NOT NULL DEFAULT 0,
     "uniqueVisitors" INTEGER NOT NULL DEFAULT 0,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
-
-    CONSTRAINT "LinkAnalyticsDay_pkey" PRIMARY KEY ("id")
+    CONSTRAINT "LinkAnalyticsDaily_pkey" PRIMARY KEY ("organizationId", "linkId", "day")
 );
 
--- CreateTable
-CREATE TABLE "LinkAnalyticsBreakdown" (
-    "id" TEXT NOT NULL,
+CREATE TABLE "LinkAnalyticsDimensionDaily" (
     "organizationId" TEXT NOT NULL,
     "linkId" TEXT NOT NULL,
-    "day" TIMESTAMP(3) NOT NULL,
-    "country" TEXT NOT NULL,
-    "deviceCategory" TEXT NOT NULL,
-    "referrerHost" TEXT NOT NULL,
+    "day" DATE NOT NULL,
+    "dimension" "AnalyticsDimension" NOT NULL,
+    "value" VARCHAR(253) NOT NULL,
     "clicks" INTEGER NOT NULL DEFAULT 0,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
-
-    CONSTRAINT "LinkAnalyticsBreakdown_pkey" PRIMARY KEY ("id")
+    CONSTRAINT "LinkAnalyticsDimensionDaily_pkey" PRIMARY KEY ("organizationId", "linkId", "day", "dimension", "value")
 );
 
--- CreateTable
-CREATE TABLE "LinkAnalyticsDailyVisitor" (
-    "id" TEXT NOT NULL,
+CREATE TABLE "LinkAnalyticsVisitor" (
     "organizationId" TEXT NOT NULL,
     "linkId" TEXT NOT NULL,
-    "day" TIMESTAMP(3) NOT NULL,
-    "visitorDigest" TEXT NOT NULL,
+    "day" DATE NOT NULL,
+    "visitorDigest" CHAR(64) NOT NULL,
     "expiresAt" TIMESTAMP(3) NOT NULL,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
-    CONSTRAINT "LinkAnalyticsDailyVisitor_pkey" PRIMARY KEY ("id")
+    CONSTRAINT "LinkAnalyticsVisitor_pkey" PRIMARY KEY ("organizationId", "linkId", "day", "visitorDigest")
 );
 
--- CreateIndex
-CREATE INDEX "LinkAnalyticsDay_organizationId_day_idx" ON "LinkAnalyticsDay"("organizationId", "day");
+CREATE UNIQUE INDEX "Link_organizationId_id_key" ON "Link"("organizationId", "id");
+CREATE INDEX "LinkAnalyticsDaily_organizationId_day_idx" ON "LinkAnalyticsDaily"("organizationId", "day");
+CREATE INDEX "LinkAnalyticsDaily_day_idx" ON "LinkAnalyticsDaily"("day");
+CREATE INDEX "LinkAnalyticsDimensionDaily_organizationId_dimension_day_idx" ON "LinkAnalyticsDimensionDaily"("organizationId", "dimension", "day");
+CREATE INDEX "LinkAnalyticsVisitor_expiresAt_idx" ON "LinkAnalyticsVisitor"("expiresAt");
 
--- CreateIndex
-CREATE INDEX "LinkAnalyticsDay_linkId_day_idx" ON "LinkAnalyticsDay"("linkId", "day");
+ALTER TABLE "LinkAnalyticsDaily"
+  ADD CONSTRAINT "LinkAnalyticsDaily_organizationId_fkey"
+  FOREIGN KEY ("organizationId") REFERENCES "Organization"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
--- CreateIndex
-CREATE UNIQUE INDEX "LinkAnalyticsDay_organizationId_linkId_day_key" ON "LinkAnalyticsDay"("organizationId", "linkId", "day");
+ALTER TABLE "LinkAnalyticsDaily"
+  ADD CONSTRAINT "LinkAnalyticsDaily_organizationId_linkId_fkey"
+  FOREIGN KEY ("organizationId", "linkId") REFERENCES "Link"("organizationId", "id") ON DELETE CASCADE ON UPDATE CASCADE;
 
--- CreateIndex
-CREATE INDEX "LinkAnalyticsBreakdown_organizationId_day_idx" ON "LinkAnalyticsBreakdown"("organizationId", "day");
+ALTER TABLE "LinkAnalyticsDimensionDaily"
+  ADD CONSTRAINT "LinkAnalyticsDimensionDaily_organizationId_linkId_day_fkey"
+  FOREIGN KEY ("organizationId", "linkId", "day") REFERENCES "LinkAnalyticsDaily"("organizationId", "linkId", "day") ON DELETE CASCADE ON UPDATE CASCADE;
 
--- CreateIndex
-CREATE INDEX "LinkAnalyticsBreakdown_linkId_day_idx" ON "LinkAnalyticsBreakdown"("linkId", "day");
-
--- CreateIndex
-CREATE UNIQUE INDEX "LinkAnalyticsBreakdown_organizationId_linkId_day_country_de_key" ON "LinkAnalyticsBreakdown"("organizationId", "linkId", "day", "country", "deviceCategory", "referrerHost");
-
--- CreateIndex
-CREATE INDEX "LinkAnalyticsDailyVisitor_expiresAt_idx" ON "LinkAnalyticsDailyVisitor"("expiresAt");
-
--- CreateIndex
-CREATE INDEX "LinkAnalyticsDailyVisitor_organizationId_linkId_day_idx" ON "LinkAnalyticsDailyVisitor"("organizationId", "linkId", "day");
-
--- CreateIndex
-CREATE UNIQUE INDEX "LinkAnalyticsDailyVisitor_organizationId_linkId_day_visitor_key" ON "LinkAnalyticsDailyVisitor"("organizationId", "linkId", "day", "visitorDigest");
-
--- AddForeignKey
-ALTER TABLE "Session" ADD CONSTRAINT "Session_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "Account" ADD CONSTRAINT "Account_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "Member" ADD CONSTRAINT "Member_organizationId_fkey" FOREIGN KEY ("organizationId") REFERENCES "Organization"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "Member" ADD CONSTRAINT "Member_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "Invitation" ADD CONSTRAINT "Invitation_organizationId_fkey" FOREIGN KEY ("organizationId") REFERENCES "Organization"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "Link" ADD CONSTRAINT "Link_organizationId_fkey" FOREIGN KEY ("organizationId") REFERENCES "Organization"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "LinkAnalyticsDay" ADD CONSTRAINT "LinkAnalyticsDay_organizationId_fkey" FOREIGN KEY ("organizationId") REFERENCES "Organization"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "LinkAnalyticsDay" ADD CONSTRAINT "LinkAnalyticsDay_linkId_fkey" FOREIGN KEY ("linkId") REFERENCES "Link"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "LinkAnalyticsBreakdown" ADD CONSTRAINT "LinkAnalyticsBreakdown_organizationId_fkey" FOREIGN KEY ("organizationId") REFERENCES "Organization"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "LinkAnalyticsBreakdown" ADD CONSTRAINT "LinkAnalyticsBreakdown_linkId_fkey" FOREIGN KEY ("linkId") REFERENCES "Link"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "LinkAnalyticsDailyVisitor" ADD CONSTRAINT "LinkAnalyticsDailyVisitor_organizationId_fkey" FOREIGN KEY ("organizationId") REFERENCES "Organization"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "LinkAnalyticsDailyVisitor" ADD CONSTRAINT "LinkAnalyticsDailyVisitor_linkId_fkey" FOREIGN KEY ("linkId") REFERENCES "Link"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "LinkAnalyticsVisitor"
+  ADD CONSTRAINT "LinkAnalyticsVisitor_organizationId_linkId_day_fkey"
+  FOREIGN KEY ("organizationId", "linkId", "day") REFERENCES "LinkAnalyticsDaily"("organizationId", "linkId", "day") ON DELETE CASCADE ON UPDATE CASCADE;
