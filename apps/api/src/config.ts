@@ -33,9 +33,18 @@ export function getConfig() {
   const secret = production
     ? required("BETTER_AUTH_SECRET")
     : (process.env.BETTER_AUTH_SECRET ?? "local-development-secret");
+  const analyticsVisitorSecret = production
+    ? required("ANALYTICS_VISITOR_SECRET")
+    : (process.env.ANALYTICS_VISITOR_SECRET ?? "local-analytics-visitor-secret");
 
   if (production && secret.length < 32) {
     throw new Error("BETTER_AUTH_SECRET must be at least 32 characters in production.");
+  }
+  if (production && analyticsVisitorSecret.length < 32) {
+    throw new Error("ANALYTICS_VISITOR_SECRET must be at least 32 characters in production.");
+  }
+  if (production && analyticsVisitorSecret === secret) {
+    throw new Error("ANALYTICS_VISITOR_SECRET must differ from BETTER_AUTH_SECRET.");
   }
   const configuredBaseDomain = baseDomain(
     "APP_BASE_DOMAIN",
@@ -50,5 +59,13 @@ export function getConfig() {
     .filter(Boolean)
     .map((origin) => (production ? httpsUrl("TRUSTED_ORIGINS", origin) : origin));
 
-  return { baseDomain: configuredBaseDomain, baseUrl, databaseUrl, origins, production, secret };
+  return {
+    analyticsVisitorSecret,
+    baseDomain: configuredBaseDomain,
+    baseUrl,
+    databaseUrl,
+    origins,
+    production,
+    secret,
+  };
 }

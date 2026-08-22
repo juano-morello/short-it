@@ -23,9 +23,12 @@
   }
 
   # Tenant hosts expose only public CUID redirects. Their host is retained for
-  # the API's independently validated tenant lookup.
+  # the API's independently validated tenant lookup. Client identity is
+  # normalized at this edge before analytics derives its ephemeral digest.
   handle @public-link {
-    reverse_proxy api:3000
+    reverse_proxy api:3000 {
+      header_up X-Shortit-Client-IP {remote_host}
+    }
   }
 
   handle {

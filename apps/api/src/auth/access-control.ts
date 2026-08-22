@@ -42,3 +42,11 @@ export function canCreateLinks(role: string): boolean {
     return (permissions?.link as readonly string[] | undefined)?.includes("create") ?? false;
   });
 }
+
+export function canReadAnalytics(role: string): boolean {
+  return role.split(",").some((assignedRole) => {
+    const permissions =
+      workspaceRolePermissions[assignedRole as keyof typeof workspaceRolePermissions];
+    return (permissions?.analytics as readonly string[] | undefined)?.includes("read") ?? false;
+  });
+}

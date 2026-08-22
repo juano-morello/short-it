@@ -11,6 +11,10 @@ Public visitors cross the edge proxy to redirect handling. Dashboard users cross
 same-origin app/API boundary. The API crosses to PostgreSQL. Workspace subdomains are
 user-controlled names and cannot be trusted with dashboard cookies.
 
+For public redirects, Caddy is the trusted source of `X-Shortit-Client-IP`: it overwrites the
+header from the direct connection before the API derives an ephemeral visitor digest. Neither a
+browser-provided header nor `X-Forwarded-For` is an analytics identity source.
+
 ## Actors and abuse cases
 
 - An unauthenticated user attempts signup abuse or credential stuffing.
@@ -40,7 +44,13 @@ prerequisites for multi-instance production deployment.
 
 Credentials and session tokens are secret. Invitation IDs and destination URLs are sensitive.
 Raw IPs and raw user-agent strings are forbidden from storage and logs. A keyed daily visitor
-identifier has a 24-hour lifecycle. Aggregates expire after 12 months.
+identifier is scoped to the organization, link, and UTC day, expires at the next UTC midnight, and
+is physically removed within a bounded five-minute cleanup grace.
+Launch stores `Unknown` country, a coarse device category, and a normalized referrer host only.
+Per-link daily referrer storage is capped at 100 hosts, with overflow aggregated as `other`.
+Aggregates expire after 12 months. Production must run the prune command at least every five
+minutes. A prune failure is an immediate retention-breach alert, and a missing prune-success event
+for ten minutes raises a second alert.
 
 ## Dependency and supply-chain risk
 
@@ -58,7 +68,11 @@ Only HTTP and HTTPS destinations are permitted. Redirects resolve DNS immediatel
 and reject loopback, private, link-local, carrier-grade NAT, and metadata-service addresses. A
 resolver failure or resolver-capacity exhaustion returns retryable 503. This reduces, but cannot
 eliminate, browser-side DNS rebinding risk. Containers run on an isolated Compose network;
-production runtime must be non-root and use managed backups.
+production runtime must be non-root and use managed backups. Analytics runs after a redirect response
+is committed. It has a separate two-connection database pool and a process-local 20-capture gate,
+so a saturated or failing writer cannot hold ordinary redirect database capacity. The gate does not
+coordinate across API processes; a shared admission policy is required before multi-instance
+production.
 
 ## Mitigations and verification
 
@@ -67,7 +81,9 @@ queries receive unit and integration tests. Live acceptance tests verify authent
 link-publication throttling, public redirect isolation, redirect headers, and the edge request-size
 limit. Browser tests verify role-limited UI and absence of dashboard cookies on tenant-host
 navigation. Redirect tests cover fresh DNS validation, resolver capacity, and generic 404 outcomes.
-Security review is required before each release.
+Security review is required before each release. Analytics verification adds Caddy-header,
+persistence-failure, referrer-cap, daily-digest, organization-scope, retention, and browser
+reporting coverage.
 
 ## Residual risks and owners
 
