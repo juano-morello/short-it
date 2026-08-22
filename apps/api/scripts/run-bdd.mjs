@@ -2,14 +2,19 @@ import { spawnSync } from "node:child_process";
 
 const profile = process.argv[2];
 const tags = {
-  default: "not @rate-limit and not @publication-guardrails and not @analytics-overview",
+  default:
+    "not @rate-limit and not @publication-guardrails and not @analytics-overview and not @workspace-invitations",
   analytics: "@analytics-overview",
+  invitations: "@workspace-invitations and not @workspace-invitation-edge",
+  "invitation-edge": "@workspace-invitation-edge",
   "publication-guardrails": "@publication-guardrails",
   "rate-limit": "@rate-limit",
 };
 
 if (!(profile in tags)) {
-  throw new Error("Use the default, analytics, publication-guardrails, or rate-limit BDD profile.");
+  throw new Error(
+    "Use the default, analytics, invitations, invitation-edge, publication-guardrails, or rate-limit BDD profile.",
+  );
 }
 
 function run(command, arguments_) {

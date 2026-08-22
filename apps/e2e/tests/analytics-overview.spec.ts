@@ -4,6 +4,8 @@ import { expect, test } from "@playwright/test";
 test("a workspace member sees privacy-preserving redirect aggregates", async ({ page }) => {
   const suffix = randomUUID().replaceAll("-", "").slice(0, 12);
   const workspaceHandle = `analytics${suffix}`;
+  const publicOrigin = new URL(process.env.E2E_BASE_URL ?? "http://app.localhost:8080");
+  publicOrigin.hostname = `${workspaceHandle}.localhost`;
 
   await page.goto("/");
   await page.getByRole("button", { name: "Create a workspace" }).click();
@@ -24,7 +26,7 @@ test("a workspace member sees privacy-preserving redirect aggregates", async ({ 
   const slug = linkText?.match(/c[a-z0-9]{24}/)?.[0];
   expect(slug).toBeTruthy();
 
-  const redirect = await page.request.get(`http://${workspaceHandle}.localhost:8080/${slug}`, {
+  const redirect = await page.request.get(new URL(`/${slug}`, publicOrigin).href, {
     headers: { referer: "https://source.example/private-marker", "user-agent": "private-marker" },
     maxRedirects: 0,
   });

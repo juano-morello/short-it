@@ -1,10 +1,18 @@
-import { type FormEvent, type ReactNode, useCallback, useEffect, useState } from "react";
+import { type FormEvent, type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { type AnalyticsOverview, analyticsGateway } from "./analytics-gateway.js";
 import { MetricCard } from "./components/MetricCard.js";
 import { linkGateway, type PublishedLink } from "./link-gateway.js";
 import { workspaceGateway } from "./workspace-gateway.js";
 
-type Screen = "dashboard" | "landing" | "onboarding" | "session-error" | "sign-in" | "sign-up";
+type Screen =
+  | "dashboard"
+  | "invitation"
+  | "invitation-unavailable"
+  | "landing"
+  | "onboarding"
+  | "session-error"
+  | "sign-in"
+  | "sign-up";
 type SessionState = "dashboard" | "needs-workspace" | "signed-out" | "unavailable";
 
 type Workspace = {
@@ -14,6 +22,8 @@ type Workspace = {
 };
 
 type WorkspaceRole = string;
+type PendingInvitation = { email: string; id: string; role: "analyst" | "editor" };
+type InvitationListState = "idle" | "loaded" | "loading" | "error";
 
 const initialForm = {
   email: "",
@@ -38,66 +48,115 @@ export function App() {
   const [analyticsOverview, setAnalyticsOverview] = useState<AnalyticsOverview>();
   const [isAnalyticsLoading, setIsAnalyticsLoading] = useState(false);
   const [form, setForm] = useState(initialForm);
+  const [invitationActionError, setInvitationActionError] = useState<string>();
+  const [invitationListError, setInvitationListError] = useState<string>();
+  const [invitationListState, setInvitationListState] = useState<InvitationListState>("idle");
   const [isLoading, setIsLoading] = useState(true);
+  const [isInvitationSubmitting, setIsInvitationSubmitting] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const acceptedInvitationOrganizationId = useRef<string | undefined>(undefined);
+  const pendingInvitationId = useRef<string | undefined>(undefined);
+  const [invitations, setInvitations] = useState<PendingInvitation[]>([]);
+  const [invitationLink, setInvitationLink] = useState<string>();
   const [publishedLink, setPublishedLink] = useState<PublishedLink>();
   const [screen, setScreen] = useState<Screen>("landing");
   const [workspace, setWorkspace] = useState<Workspace>();
   const [workspaceRole, setWorkspaceRole] = useState<WorkspaceRole>();
 
-  const loadExistingSession = useCallback(async (): Promise<SessionState> => {
-    setIsLoading(true);
-    setError(undefined);
+  const loadExistingSession = useCallback(
+    async (invitationToAccept?: string): Promise<SessionState> => {
+      setIsLoading(true);
+      setError(undefined);
 
-    try {
-      const session = await workspaceGateway.getSession();
-      if (session.error) {
-        throw new Error(session.error.message);
+      try {
+        const invitationIdFromHash = getInvitationIdFromHash();
+        if (invitationIdFromHash) {
+          window.history.replaceState(
+            null,
+            "",
+            `${window.location.pathname}${window.location.search}`,
+          );
+          pendingInvitationId.current = invitationIdFromHash;
+        }
+
+        const session = await workspaceGateway.getSession();
+        if (session.error) {
+          throw new Error(session.error.message);
+        }
+
+        if (!session.data?.user) {
+          setScreen("landing");
+          return "signed-out";
+        }
+        const invitationId =
+          invitationToAccept ?? invitationIdFromHash ?? pendingInvitationId.current;
+        if (invitationId) {
+          if (!invitationToAccept) {
+            setScreen("invitation");
+            return "needs-workspace";
+          }
+          const accepted = await workspaceGateway.acceptInvitation(invitationId);
+          if (accepted.error) {
+            if (!accepted.retryable) {
+              pendingInvitationId.current = undefined;
+              setScreen("invitation-unavailable");
+              return "needs-workspace";
+            }
+            throw new Error("We couldn't accept this invitation. It may no longer be available.");
+          }
+          pendingInvitationId.current = undefined;
+          acceptedInvitationOrganizationId.current = (
+            accepted.data as { invitation?: { organizationId?: string } } | undefined
+          )?.invitation?.organizationId;
+        }
+
+        const organizations = await workspaceGateway.listWorkspaces();
+        if (organizations.error) {
+          throw new Error(organizations.error.message);
+        }
+
+        const firstWorkspace = acceptedInvitationOrganizationId.current
+          ? organizations.data?.find(
+              (candidate) => candidate.id === acceptedInvitationOrganizationId.current,
+            )
+          : organizations.data?.[0];
+
+        if (!firstWorkspace) {
+          setScreen("onboarding");
+          return "needs-workspace";
+        }
+
+        const membershipResult = await workspaceGateway.getMembership(firstWorkspace.id);
+        if (membershipResult.error || !membershipResult.data) {
+          throw new Error(membershipResult.error?.message);
+        }
+
+        setWorkspace(firstWorkspace);
+        setWorkspaceRole(membershipResult.data.role as WorkspaceRole);
+        acceptedInvitationOrganizationId.current = undefined;
+        setScreen("dashboard");
+        return "dashboard";
+      } catch {
+        setError("We couldn't load your workspace. Please try again.");
+        setScreen("session-error");
+        return "unavailable";
+      } finally {
+        setIsLoading(false);
       }
-
-      if (!session.data?.user) {
-        setScreen("landing");
-        return "signed-out";
-      }
-      const user = session.data.user;
-
-      const organizations = await workspaceGateway.listWorkspaces();
-      if (organizations.error) {
-        throw new Error(organizations.error.message);
-      }
-
-      const firstWorkspace = organizations.data?.[0];
-
-      if (!firstWorkspace) {
-        setScreen("onboarding");
-        return "needs-workspace";
-      }
-
-      const fullWorkspace = await workspaceGateway.getWorkspace(firstWorkspace.id);
-      if (fullWorkspace.error) {
-        throw new Error(fullWorkspace.error.message);
-      }
-
-      const membership = fullWorkspace.data?.members.find((member) => member.userId === user.id);
-      if (!membership) {
-        throw new Error("The current user's workspace membership could not be resolved.");
-      }
-
-      setWorkspace(firstWorkspace);
-      setWorkspaceRole(membership.role as WorkspaceRole);
-      setScreen("dashboard");
-      return "dashboard";
-    } catch {
-      setError("We couldn't load your workspace. Please try again.");
-      setScreen("session-error");
-      return "unavailable";
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
+    },
+    [],
+  );
 
   useEffect(() => {
     void loadExistingSession();
+  }, [loadExistingSession]);
+
+  useEffect(() => {
+    const acceptInvitationFromHash = (): void => {
+      if (getInvitationIdFromHash()) void loadExistingSession();
+    };
+    window.addEventListener("hashchange", acceptInvitationFromHash);
+    return () => window.removeEventListener("hashchange", acceptInvitationFromHash);
   }, [loadExistingSession]);
 
   useEffect(() => {
@@ -116,6 +175,39 @@ export function App() {
       isCurrent = false;
     };
   }, [workspace]);
+
+  const loadInvitations = useCallback((): void => {
+    if (!workspace || !workspaceRole?.split(",").includes("owner")) return;
+    setInvitationListError(undefined);
+    setInvitationListState("loading");
+    void workspaceGateway
+      .listInvitations(workspace.id)
+      .then((result) => {
+        if (result.data) {
+          setInvitations(
+            result.data
+              .filter((invitation) => invitation.status === "pending")
+              .map((invitation) => ({
+                email: invitation.email,
+                id: invitation.id,
+                role: invitation.role as "analyst" | "editor",
+              })),
+          );
+          setInvitationListState("loaded");
+        } else {
+          setInvitationListError("We couldn't load invitations.");
+          setInvitationListState("error");
+        }
+      })
+      .catch(() => {
+        setInvitationListError("We couldn't load invitations.");
+        setInvitationListState("error");
+      });
+  }, [workspace, workspaceRole]);
+
+  useEffect(() => {
+    loadInvitations();
+  }, [loadInvitations]);
 
   function updateForm(field: keyof typeof form, value: string): void {
     setForm((current) => ({ ...current, [field]: value }));
@@ -193,6 +285,24 @@ export function App() {
     }
   }
 
+  async function handleInvitationAcceptance(): Promise<void> {
+    const invitationId = pendingInvitationId.current;
+    if (!invitationId) return;
+    setError(undefined);
+    setIsSubmitting(true);
+    try {
+      await loadExistingSession(invitationId);
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  function leaveUnavailableInvitation(): void {
+    pendingInvitationId.current = undefined;
+    acceptedInvitationOrganizationId.current = undefined;
+    void loadExistingSession();
+  }
+
   async function handleWorkspaceRetry(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
     setError(undefined);
@@ -228,6 +338,54 @@ export function App() {
     setIsSubmitting(false);
   }
 
+  async function handleInvitation(
+    event: FormEvent<HTMLFormElement>,
+    role: "analyst" | "editor",
+    email: string,
+  ): Promise<boolean> {
+    event.preventDefault();
+    if (!workspace) return false;
+    setInvitationActionError(undefined);
+    setIsInvitationSubmitting(true);
+    const result = await workspaceGateway.inviteMember({
+      email: email.trim(),
+      organizationId: workspace.id,
+      role,
+    });
+    if (result.error || !result.data) {
+      setInvitationActionError(
+        "We couldn't create that invitation. Check the email and try again.",
+      );
+      setIsInvitationSubmitting(false);
+      return false;
+    } else {
+      const created = result.data;
+      const link = `${window.location.origin}/#invite=${encodeURIComponent(created.id)}`;
+      setInvitationLink(link);
+      setInvitations((current) => [
+        ...current,
+        { email: created.email, id: created.id, role: created.role as "analyst" | "editor" },
+      ]);
+    }
+    setIsInvitationSubmitting(false);
+    return true;
+  }
+
+  async function handleInvitationCancellation(invitationId: string): Promise<void> {
+    if (!workspace) return;
+    setInvitationActionError(undefined);
+    setIsInvitationSubmitting(true);
+    const result = await workspaceGateway.cancelInvitation(workspace.id, invitationId);
+    if (result.error) {
+      setInvitationActionError("We couldn't cancel that invitation. Please try again.");
+      setIsInvitationSubmitting(false);
+      return;
+    }
+    setInvitations((current) => current.filter((invitation) => invitation.id !== invitationId));
+    if (invitationLink?.includes(invitationId)) setInvitationLink(undefined);
+    setIsInvitationSubmitting(false);
+  }
+
   if (isLoading) {
     return <main className="site-shell" aria-busy="true" />;
   }
@@ -241,8 +399,17 @@ export function App() {
         isAnalyticsLoading={isAnalyticsLoading}
         isSubmitting={isSubmitting}
         onPublish={handleLinkPublication}
+        onCancelInvitation={handleInvitationCancellation}
+        onCreateInvitation={handleInvitation}
         onUpdateDestination={(value) => updateForm("destinationUrl", value)}
         publishedLink={publishedLink}
+        invitationLink={invitationLink}
+        invitationActionError={invitationActionError}
+        invitationListError={invitationListError}
+        invitationListState={invitationListState}
+        invitations={invitations}
+        isInvitationSubmitting={isInvitationSubmitting}
+        onRetryInvitationList={loadInvitations}
         role={workspaceRole}
         value={form.destinationUrl}
         workspace={workspace}
@@ -254,8 +421,37 @@ export function App() {
     return (
       <AuthLayout title="We couldn't load your workspace">
         <FormError error={error} />
-        <button onClick={() => void loadExistingSession()} type="button">
+        <button onClick={() => void loadExistingSession(pendingInvitationId.current)} type="button">
           Try again
+        </button>
+      </AuthLayout>
+    );
+  }
+
+  if (screen === "invitation") {
+    return (
+      <AuthLayout title="Join this workspace?">
+        <p className="intro">Accepting adds your signed-in account to the workspace.</p>
+        <FormError error={error} />
+        <button
+          disabled={isSubmitting}
+          onClick={() => void handleInvitationAcceptance()}
+          type="button"
+        >
+          Accept invitation
+        </button>
+      </AuthLayout>
+    );
+  }
+
+  if (screen === "invitation-unavailable") {
+    return (
+      <AuthLayout title="This invitation is no longer available">
+        <p className="intro">
+          Ask a workspace owner to send a new invitation if you still need access.
+        </p>
+        <button onClick={leaveUnavailableInvitation} type="button">
+          Continue to your workspace
         </button>
       </AuthLayout>
     );
@@ -423,8 +619,17 @@ function Dashboard({
   analyticsOverview,
   error,
   isAnalyticsLoading,
+  invitationActionError,
+  invitationListError,
+  invitationListState,
   isSubmitting,
+  isInvitationSubmitting,
+  invitationLink,
+  invitations,
+  onCancelInvitation,
+  onCreateInvitation,
   onPublish,
+  onRetryInvitationList,
   onUpdateDestination,
   publishedLink,
   role,
@@ -436,7 +641,20 @@ function Dashboard({
   error: string | undefined;
   isAnalyticsLoading: boolean;
   isSubmitting: boolean;
+  isInvitationSubmitting: boolean;
+  invitationLink: string | undefined;
+  invitationActionError: string | undefined;
+  invitationListError: string | undefined;
+  invitationListState: InvitationListState;
+  invitations: PendingInvitation[];
+  onCancelInvitation: (invitationId: string) => Promise<void>;
+  onCreateInvitation: (
+    event: FormEvent<HTMLFormElement>,
+    role: "analyst" | "editor",
+    email: string,
+  ) => Promise<boolean>;
   onPublish: (event: FormEvent<HTMLFormElement>) => Promise<void>;
+  onRetryInvitationList: () => void;
   onUpdateDestination: (value: string) => void;
   publishedLink: PublishedLink | undefined;
   role: WorkspaceRole;
@@ -487,6 +705,19 @@ function Dashboard({
             </strong>
           </p>
         ) : null}
+        {role.split(",").includes("owner") ? (
+          <InvitationPanel
+            error={invitationActionError}
+            listError={invitationListError}
+            listState={invitationListState}
+            invitationLink={invitationLink}
+            invitations={invitations}
+            isSubmitting={isInvitationSubmitting}
+            onCancel={onCancelInvitation}
+            onCreate={onCreateInvitation}
+            onRetryList={onRetryInvitationList}
+          />
+        ) : null}
         <AnalyticsPanel
           error={analyticsError}
           isLoading={isAnalyticsLoading}
@@ -495,6 +726,100 @@ function Dashboard({
       </section>
     </main>
   );
+}
+
+function InvitationPanel({
+  error,
+  listError,
+  listState,
+  invitationLink,
+  invitations,
+  isSubmitting,
+  onCancel,
+  onCreate,
+  onRetryList,
+}: {
+  error: string | undefined;
+  listError: string | undefined;
+  listState: InvitationListState;
+  invitationLink: string | undefined;
+  invitations: PendingInvitation[];
+  isSubmitting: boolean;
+  onCancel: (invitationId: string) => Promise<void>;
+  onCreate: (
+    event: FormEvent<HTMLFormElement>,
+    role: "analyst" | "editor",
+    email: string,
+  ) => Promise<boolean>;
+  onRetryList: () => void;
+}) {
+  const [email, setEmail] = useState("");
+  const [role, setRole] = useState<"analyst" | "editor">("editor");
+  return (
+    <section className="analytics-panel" aria-labelledby="invitations-title">
+      <p className="eyebrow">WORKSPACE ACCESS</p>
+      <h2 id="invitations-title">Invite a teammate</h2>
+      <form
+        className="auth-form"
+        onSubmit={(event) => {
+          void onCreate(event, role, email).then((created) => {
+            if (created) setEmail("");
+          });
+        }}
+      >
+        <TextField label="Invitation email" onChange={setEmail} type="email" value={email} />
+        <label className="field" htmlFor="invitation-role">
+          <span>Workspace role</span>
+          <select
+            id="invitation-role"
+            onChange={(event) => setRole(event.target.value as typeof role)}
+            value={role}
+          >
+            <option value="editor">Editor</option>
+            <option value="analyst">Analyst</option>
+          </select>
+        </label>
+        <FormError error={error} />
+        <button disabled={isSubmitting} type="submit">
+          Create invitation
+        </button>
+      </form>
+      {invitationLink ? (
+        <label className="field">
+          <span>Invitation link</span>
+          <input aria-label="Invitation link" readOnly type="text" value={invitationLink} />
+        </label>
+      ) : null}
+      {listState === "loading" ? (
+        <p className="analytics-status">Loading invitations…</p>
+      ) : listState === "error" ? (
+        <div className="analytics-status" role="alert">
+          <p>{listError}</p>
+          <button onClick={onRetryList} type="button">
+            Retry invitations
+          </button>
+        </div>
+      ) : invitations.length ? (
+        <ul>
+          {invitations.map((invitation) => (
+            <li key={invitation.id}>
+              {invitation.email} ({formatRole(invitation.role)})
+              <button onClick={() => void onCancel(invitation.id)} type="button">
+                Cancel invitation
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="analytics-status">No pending invitations.</p>
+      )}
+    </section>
+  );
+}
+
+function getInvitationIdFromHash(): string | undefined {
+  const match = window.location.hash.match(/^#invite=([A-Za-z0-9]{32})$/);
+  return match?.[1];
 }
 
 function AnalyticsPanel({

@@ -79,6 +79,12 @@ the operator must restore a successful run before the five-minute cleanup grace 
 schedule is required to physically remove expired daily visitor digests; expiry metadata alone does
 not delete rows.
 
+Workspace invitations use opaque capabilities and retain an invited email while pending only. The
+application deletes accepted and cancelled invitations immediately. Before production, the operator
+must run `node apps/api/dist/auth/prune-invitations.js` in the production API image at least every
+five minutes and alert on a failed run or no successful run for ten minutes. An overdue invitation
+prune is a retention breach.
+
 ## Migrations and rollback
 
 Prisma migrations must run before an API image that relies on them. Migrations are additive

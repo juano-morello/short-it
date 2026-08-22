@@ -41,6 +41,13 @@ user-agent strings are excluded from analytics storage. Digests expire at the ne
 are physically removed within a bounded five-minute cleanup grace. Daily aggregates and dimensions
 are retained for 12 months.
 
+Workspace invitations are Better Auth records scoped to an organization. Owners alone can create and
+list editor or analyst invitations; a separate application membership projection supplies the current
+member role without exposing the raw organization invitation list. Invitation capabilities live in a
+browser fragment, are cleared from history before network work, and require an explicit signed-in,
+matching-email acceptance. Accepted and cancelled rows are deleted immediately; a five-minute job
+removes expired pending rows and any terminal-row cleanup residue.
+
 ## Integrations and public contracts
 
 The dashboard and API share the trusted `app.<domain>` origin. Better Auth session cookies

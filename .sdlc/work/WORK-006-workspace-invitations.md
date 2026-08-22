@@ -21,6 +21,8 @@ letting another workspace, another role, or an email mismatch create membership.
 ## Scope
 
 - Use the existing Better Auth Organization invitation records and opaque invitation IDs.
+- Add the two additive Better Auth fields required by invitation creation and acceptance:
+  `Invitation.createdAt` and nullable `Session.activeOrganizationId`.
 - Let an owner create, list, copy, and cancel pending editor or analyst invitations for the active
   workspace.
 - Let a signed-in account accept a pending invitation only when its supplied account email matches
@@ -28,12 +30,14 @@ letting another workspace, another role, or an email mismatch create membership.
 - Render owner controls and the recipient acceptance state in the dashboard.
 - Restrict invitation creation, listing, and cancellation to owners. Editors and analysts receive
   no invitation management controls or authority.
+- Delete accepted and cancelled invitations immediately. Prune expired pending invitations at
+  least every five minutes.
 
 ## Non-goals
 
 Email verification, outbound invitation delivery, open enrollment links, member-role changes,
 member removal, workspace switching, user or workspace deletion, custom roles, and database
-migrations are outside this work item.
+migrations beyond the two required Better Auth fields are outside this work item.
 
 ## Acceptance scenarios
 
@@ -49,14 +53,21 @@ migrations are outside this work item.
 
 ## Proposed approach
 
-Configure the existing Better Auth client with the declared workspace roles so its Organization
-endpoints apply the static access-control policy. Keep invitation records inside Better Auth and
-use its create, list, cancel, get, and accept operations through a small dashboard gateway.
+Configure Better Auth's server Organization plugin with the static workspace roles. Keep invitation
+records inside Better Auth and use its create, list, cancel, and accept operations through a small
+dashboard gateway. The server's canonical invitation capability and global owner gates protect raw
+Organization endpoints; the application-owned minimal membership projection replaces the raw
+full-organization response for ordinary members.
+
+The dashboard client uses Better Auth's generic Organization transport only. It does not carry an
+access-control projection and is not an authorization boundary; server-side session, membership,
+and role checks are authoritative.
 
 The dashboard creates and lists invitations only for a server-confirmed owner. It creates a
-copyable app URL containing the opaque invitation ID. When that URL is opened, the signed-in
-recipient reads and accepts it through Better Auth; the normal Organization plugin email-match
-check is the authorization boundary for acceptance.
+copyable app URL containing the opaque invitation ID in its fragment, then removes that fragment
+from browser history after capture. When that URL is opened, the signed-in recipient accepts it
+through Better Auth; the normal Organization plugin email-match check is the authorization boundary
+for acceptance.
 
 ## Alternatives and tradeoffs
 
@@ -69,15 +80,19 @@ can accept it. This residual risk is documented and deferred with verified-email
 ## Consequential decisions
 
 Juano approved owner-only invitation management and the launch tradeoff above on 2026-08-22. The
-existing no-email-verification and no-email-delivery scope remains unchanged. No dependency,
-migration, infrastructure, or public API change is proposed.
+existing no-email-verification and no-email-delivery scope remains unchanged. Juano also approved
+the additive `Invitation.createdAt` and `Session.activeOrganizationId` migration, direct-endpoint
+owner gates, immediate terminal-invitation deletion, and five-minute expired-invitation pruning.
+No dependency or production infrastructure change is proposed.
 
 ## Risks and dependencies
 
 The behavior depends on Better Auth 1.7.1's opaque invitation IDs and matching-email acceptance.
 Invitation URLs are capabilities and must not be logged. Current Better Auth guidance recommends
 verified emails when invitation IDs are exposed in member-visible lists; this work avoids recipient
-lists and retains the explicitly approved unverified-email limitation.
+lists and retains the explicitly approved unverified-email limitation. Production must run the
+invitation prune command at least every five minutes; an overdue prune is a privacy retention
+breach.
 
 ## TDD and BDD strategy
 
@@ -97,13 +112,14 @@ engineering-excellence reviews are required before PR readiness.
 No new persistent tables or deployment services are introduced. Better Auth's existing invitation
 expiry, invitation limit, and membership limit stay in effect. Invitation URLs and errors must not
 be included in structured logs. The unverified-email limitation is a known launch risk, not an
-email-ownership assertion.
+email-ownership assertion. The operator must run invitation pruning at least every five minutes;
+terminal rows are deleted immediately.
 
 ## Migration and rollback
 
-No migration is required. Rolling back application configuration and dashboard code leaves pending
-Better Auth invitations to expire under the existing seven-day policy; an owner may also cancel
-them before rollback.
+The additive migration adds `Invitation.createdAt` and nullable `Session.activeOrganizationId`.
+Roll back application code before considering any destructive schema change. Pending invitations
+continue to expire under the existing seven-day policy and terminal rows are removed immediately.
 
 ## Agent roster and routing
 

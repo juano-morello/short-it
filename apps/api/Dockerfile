@@ -17,6 +17,7 @@ EXPOSE 3000
 CMD ["pnpm", "--filter", "@short-it/api", "dev"]
 
 FROM development AS build
+RUN pnpm --filter @short-it/contracts build
 RUN pnpm --filter @short-it/api build
 
 FROM node:24.19.0-alpine AS production
