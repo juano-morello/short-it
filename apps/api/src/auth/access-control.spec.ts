@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { canCreateLinks, canReadAnalytics, workspaceRoles } from "./access-control.js";
+import {
+  canCreateLinks,
+  canManageInvitations,
+  canReadAnalytics,
+  workspaceRoles,
+} from "./access-control.js";
 
 describe("workspace roles", () => {
   it("gives owners the Better Auth organization and invite permissions", () => {
@@ -25,5 +30,15 @@ describe("workspace roles", () => {
 
   it("denies unknown roles analytics access", () => {
     expect(canReadAnalytics("unknown")).toBe(false);
+  });
+
+  it.each([
+    ["owner", true],
+    ["editor", false],
+    ["analyst", false],
+    ["analyst,owner", true],
+    ["unknown", false],
+  ])("derives invitation management permission for %s", (role, expected) => {
+    expect(canManageInvitations(role)).toBe(expected);
   });
 });

@@ -7,9 +7,13 @@ import { workspaceGateway } from "./workspace-gateway.js";
 
 vi.mock("./workspace-gateway.js", () => ({
   workspaceGateway: {
+    acceptInvitation: vi.fn(),
+    cancelInvitation: vi.fn(),
     createWorkspace: vi.fn(),
+    getMembership: vi.fn(),
     getSession: vi.fn(),
-    getWorkspace: vi.fn(),
+    inviteMember: vi.fn(),
+    listInvitations: vi.fn(),
     listWorkspaces: vi.fn(),
     signIn: vi.fn(),
     signUp: vi.fn(),
@@ -30,14 +34,18 @@ vi.mock("./analytics-gateway.js", () => ({
 
 describe("App", () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
     vi.mocked(workspaceGateway.getSession).mockResolvedValue({ data: null } as never);
+    vi.mocked(workspaceGateway.listInvitations).mockResolvedValue({ data: [] } as never);
     vi.mocked(analyticsGateway.getOverview).mockResolvedValue({
       data: { breakdowns: { countries: [], devices: [], referrers: [] }, daily: [] },
     });
   });
 
-  afterEach(cleanup);
+  afterEach(() => {
+    cleanup();
+    window.history.replaceState(null, "", "/");
+  });
 
   it("opens the self-service account form", async () => {
     render(<App />);
@@ -89,14 +97,284 @@ describe("App", () => {
     vi.mocked(workspaceGateway.listWorkspaces).mockResolvedValue({
       data: [{ id: "workspace-1", name: "Ada Studio", slug: "ada" }],
     } as never);
-    vi.mocked(workspaceGateway.getWorkspace).mockResolvedValue({
-      data: { members: [{ role: "owner", userId: "member-1" }] },
+    vi.mocked(workspaceGateway.getMembership).mockResolvedValue({
+      data: { role: "owner" },
     } as never);
 
     render(<App />);
 
     expect(await screen.findByRole("heading", { name: "Ada Studio" })).toBeInTheDocument();
     expect(screen.getByText("Owner", { exact: true })).toBeInTheDocument();
+  });
+
+  it("accepts a fragment invitation and opens its workspace", async () => {
+    window.history.replaceState(null, "", "/#invite=AbCdEfGhIjKlMnOpQrStUvWxYz012345");
+    vi.mocked(workspaceGateway.getSession).mockResolvedValue({
+      data: { user: { id: "member-1" } },
+    } as never);
+    vi.mocked(workspaceGateway.acceptInvitation).mockResolvedValue({
+      data: { invitation: { organizationId: "workspace-invited" } },
+    } as never);
+    vi.mocked(workspaceGateway.listWorkspaces).mockResolvedValue({
+      data: [
+        { id: "workspace-existing", name: "Existing Workspace", slug: "existing" },
+        { id: "workspace-invited", name: "Invited Workspace", slug: "invited" },
+      ],
+    } as never);
+    vi.mocked(workspaceGateway.getMembership).mockResolvedValue({
+      data: { role: "editor" },
+    } as never);
+
+    render(<App />);
+
+    expect(
+      await screen.findByRole("heading", { name: "Join this workspace?" }),
+    ).toBeInTheDocument();
+    expect(workspaceGateway.acceptInvitation).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Accept invitation" }));
+    expect(await screen.findByRole("heading", { name: "Invited Workspace" })).toBeInTheDocument();
+    expect(workspaceGateway.acceptInvitation).toHaveBeenCalledWith(
+      "AbCdEfGhIjKlMnOpQrStUvWxYz012345",
+    );
+    expect(workspaceGateway.getMembership).toHaveBeenCalledWith("workspace-invited");
+    expect(window.location.hash).toBe("");
+  });
+
+  it("retries a captured invitation after a transient acceptance failure", async () => {
+    window.history.replaceState(null, "", "/#invite=AbCdEfGhIjKlMnOpQrStUvWxYz012345");
+    vi.mocked(workspaceGateway.getSession).mockResolvedValue({
+      data: { user: { id: "member-1" } },
+    } as never);
+    vi.mocked(workspaceGateway.acceptInvitation)
+      .mockResolvedValueOnce({ error: { message: "Unavailable" }, retryable: true } as never)
+      .mockResolvedValueOnce({
+        data: { invitation: { organizationId: "workspace-invited" } },
+      } as never);
+    vi.mocked(workspaceGateway.listWorkspaces).mockResolvedValue({
+      data: [{ id: "workspace-invited", name: "Invited Workspace", slug: "invited" }],
+    } as never);
+    vi.mocked(workspaceGateway.getMembership).mockResolvedValue({
+      data: { role: "editor" },
+    } as never);
+
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Accept invitation" }));
+    expect(
+      await screen.findByRole("heading", { name: "We couldn't load your workspace" }),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+
+    expect(await screen.findByRole("heading", { name: "Invited Workspace" })).toBeInTheDocument();
+    expect(workspaceGateway.acceptInvitation).toHaveBeenCalledTimes(2);
+  });
+
+  it("lets a recipient leave the invitation flow after a terminal rejection", async () => {
+    window.history.replaceState(null, "", "/#invite=AbCdEfGhIjKlMnOpQrStUvWxYz012345");
+    vi.mocked(workspaceGateway.getSession).mockResolvedValue({
+      data: { user: { id: "member-1" } },
+    } as never);
+    vi.mocked(workspaceGateway.acceptInvitation).mockResolvedValue({
+      error: { message: "Unavailable", status: 400 },
+      retryable: false,
+    } as never);
+    vi.mocked(workspaceGateway.listWorkspaces).mockResolvedValue({ data: [] } as never);
+
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Accept invitation" }));
+    expect(
+      await screen.findByRole("heading", { name: "This invitation is no longer available" }),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Continue to your workspace" }));
+
+    expect(
+      await screen.findByRole("heading", { name: "Create your workspace" }),
+    ).toBeInTheDocument();
+    expect(workspaceGateway.acceptInvitation).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the accepted workspace target through a bootstrap retry", async () => {
+    window.history.replaceState(null, "", "/#invite=AbCdEfGhIjKlMnOpQrStUvWxYz012345");
+    vi.mocked(workspaceGateway.getSession).mockResolvedValue({
+      data: { user: { id: "member-1" } },
+    } as never);
+    vi.mocked(workspaceGateway.acceptInvitation).mockResolvedValue({
+      data: { invitation: { organizationId: "workspace-invited" } },
+    } as never);
+    vi.mocked(workspaceGateway.listWorkspaces)
+      .mockResolvedValueOnce({ error: { message: "Unavailable" } } as never)
+      .mockResolvedValueOnce({
+        data: [
+          { id: "workspace-existing", name: "Existing Workspace", slug: "existing" },
+          { id: "workspace-invited", name: "Invited Workspace", slug: "invited" },
+        ],
+      } as never);
+    vi.mocked(workspaceGateway.getMembership).mockResolvedValue({
+      data: { role: "editor" },
+    } as never);
+
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Accept invitation" }));
+    expect(
+      await screen.findByRole("heading", { name: "We couldn't load your workspace" }),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+
+    expect(await screen.findByRole("heading", { name: "Invited Workspace" })).toBeInTheDocument();
+    expect(workspaceGateway.getMembership).toHaveBeenCalledWith("workspace-invited");
+  });
+
+  it("keeps a copied invitation pending through sign-in until the recipient confirms", async () => {
+    window.history.replaceState(null, "", "/#invite=AbCdEfGhIjKlMnOpQrStUvWxYz012345");
+    vi.mocked(workspaceGateway.getSession)
+      .mockResolvedValueOnce({ data: null } as never)
+      .mockResolvedValue({ data: { user: { id: "member-1" } } } as never);
+    vi.mocked(workspaceGateway.signIn).mockResolvedValue({ data: {} } as never);
+
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Sign in" }));
+    fireEvent.change(screen.getByLabelText("Email"), { target: { value: "ada@example.test" } });
+    fireEvent.change(screen.getByLabelText("Password"), {
+      target: { value: "correct-horse-battery-staple" },
+    });
+    fireEvent.submit(getForm("Sign in"));
+
+    expect(
+      await screen.findByRole("heading", { name: "Join this workspace?" }),
+    ).toBeInTheDocument();
+    expect(workspaceGateway.acceptInvitation).not.toHaveBeenCalled();
+  });
+
+  it("accepts a copied invitation when the signed-in page receives a hash change", async () => {
+    vi.mocked(workspaceGateway.getSession).mockResolvedValue({
+      data: { user: { id: "member-1" } },
+    } as never);
+    vi.mocked(workspaceGateway.listWorkspaces)
+      .mockResolvedValueOnce({ data: [] } as never)
+      .mockResolvedValueOnce({
+        data: [{ id: "workspace-invited", name: "Invited Workspace", slug: "invited" }],
+      } as never);
+    vi.mocked(workspaceGateway.acceptInvitation).mockResolvedValue({
+      data: { invitation: { organizationId: "workspace-invited" } },
+    } as never);
+    vi.mocked(workspaceGateway.getMembership).mockResolvedValue({
+      data: { role: "editor" },
+    } as never);
+
+    render(<App />);
+
+    await screen.findByRole("heading", { name: "Create your workspace" });
+    window.history.replaceState(null, "", "/#invite=AbCdEfGhIjKlMnOpQrStUvWxYz012345");
+    fireEvent(window, new HashChangeEvent("hashchange"));
+
+    expect(
+      await screen.findByRole("heading", { name: "Join this workspace?" }),
+    ).toBeInTheDocument();
+    expect(workspaceGateway.acceptInvitation).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Accept invitation" }));
+    expect(await screen.findByRole("heading", { name: "Invited Workspace" })).toBeInTheDocument();
+    expect(workspaceGateway.acceptInvitation).toHaveBeenCalledWith(
+      "AbCdEfGhIjKlMnOpQrStUvWxYz012345",
+    );
+  });
+
+  it("lets an owner create a copyable editor invitation", async () => {
+    vi.mocked(workspaceGateway.getSession).mockResolvedValue({
+      data: { user: { id: "member-1" } },
+    } as never);
+    vi.mocked(workspaceGateway.listWorkspaces).mockResolvedValue({
+      data: [{ id: "workspace-1", name: "Ada Studio", slug: "ada" }],
+    } as never);
+    vi.mocked(workspaceGateway.getMembership).mockResolvedValue({
+      data: { role: "owner" },
+    } as never);
+    vi.mocked(workspaceGateway.inviteMember).mockResolvedValue({
+      data: {
+        email: "editor@example.test",
+        id: "AbCdEfGhIjKlMnOpQrStUvWxYz012345",
+        role: "editor",
+      },
+    } as never);
+
+    render(<App />);
+
+    await screen.findByRole("heading", { name: "Ada Studio" });
+    fireEvent.change(screen.getByLabelText("Invitation email"), {
+      target: { value: "editor@example.test" },
+    });
+    fireEvent.submit(getForm("Create invitation"));
+
+    expect(await screen.findByLabelText("Invitation link")).toHaveValue(
+      `${window.location.origin}/#invite=AbCdEfGhIjKlMnOpQrStUvWxYz012345`,
+    );
+    expect(screen.getByLabelText("Invitation link")).toHaveAttribute("readonly");
+    expect(workspaceGateway.inviteMember).toHaveBeenCalledWith({
+      email: "editor@example.test",
+      organizationId: "workspace-1",
+      role: "editor",
+    });
+    expect(screen.getByText("editor@example.test (Editor)")).toBeInTheDocument();
+  });
+
+  it("lets an owner cancel a listed invitation", async () => {
+    vi.mocked(workspaceGateway.getSession).mockResolvedValue({
+      data: { user: { id: "member-1" } },
+    } as never);
+    vi.mocked(workspaceGateway.listWorkspaces).mockResolvedValue({
+      data: [{ id: "workspace-1", name: "Ada Studio", slug: "ada" }],
+    } as never);
+    vi.mocked(workspaceGateway.getMembership).mockResolvedValue({
+      data: { role: "owner" },
+    } as never);
+    vi.mocked(workspaceGateway.listInvitations).mockResolvedValue({
+      data: [
+        {
+          email: "editor@example.test",
+          id: "AbCdEfGhIjKlMnOpQrStUvWxYz012345",
+          role: "editor",
+          status: "pending",
+        },
+      ],
+    } as never);
+    vi.mocked(workspaceGateway.cancelInvitation).mockResolvedValue({ data: {} } as never);
+
+    render(<App />);
+
+    expect(await screen.findByText("editor@example.test (Editor)")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Cancel invitation" }));
+
+    expect(await screen.findByText("No pending invitations.")).toBeInTheDocument();
+    expect(workspaceGateway.cancelInvitation).toHaveBeenCalledWith(
+      "workspace-1",
+      "AbCdEfGhIjKlMnOpQrStUvWxYz012345",
+    );
+  });
+
+  it("retries invitation loading instead of presenting a failed list as empty", async () => {
+    vi.mocked(workspaceGateway.getSession).mockResolvedValue({
+      data: { user: { id: "member-1" } },
+    } as never);
+    vi.mocked(workspaceGateway.listWorkspaces).mockResolvedValue({
+      data: [{ id: "workspace-1", name: "Ada Studio", slug: "ada" }],
+    } as never);
+    vi.mocked(workspaceGateway.getMembership).mockResolvedValue({
+      data: { role: "owner" },
+    } as never);
+    vi.mocked(workspaceGateway.listInvitations)
+      .mockResolvedValueOnce({ error: { message: "Unavailable" } } as never)
+      .mockResolvedValueOnce({ data: [] } as never);
+
+    render(<App />);
+
+    expect(await screen.findByText("We couldn't load invitations.")).toBeInTheDocument();
+    expect(screen.queryByText("No pending invitations.")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Retry invitations" }));
+
+    expect(await screen.findByText("No pending invitations.")).toBeInTheDocument();
+    expect(workspaceGateway.listInvitations).toHaveBeenCalledTimes(2);
   });
 
   it("takes a new visitor to sign in after registration", async () => {
@@ -178,8 +456,8 @@ describe("App", () => {
     vi.mocked(workspaceGateway.listWorkspaces).mockResolvedValue({
       data: [{ id: "workspace-1", name: "Ada Studio", slug: "ada" }],
     } as never);
-    vi.mocked(workspaceGateway.getWorkspace).mockResolvedValue({
-      data: { members: [{ role: "editor", userId: "member-1" }] },
+    vi.mocked(workspaceGateway.getMembership).mockResolvedValue({
+      data: { role: "editor" },
     } as never);
 
     render(<App />);
@@ -263,8 +541,8 @@ describe("App", () => {
     vi.mocked(workspaceGateway.listWorkspaces).mockResolvedValue({
       data: [{ id: "workspace-1", name: "Ada Studio", slug: "ada" }],
     } as never);
-    vi.mocked(workspaceGateway.getWorkspace).mockResolvedValue({
-      data: { members: [{ role: "owner", userId: "member-1" }] },
+    vi.mocked(workspaceGateway.getMembership).mockResolvedValue({
+      data: { role: "owner" },
     } as never);
     vi.mocked(linkGateway.publish).mockResolvedValue({
       data: {
@@ -300,8 +578,8 @@ describe("App", () => {
     vi.mocked(workspaceGateway.listWorkspaces).mockResolvedValue({
       data: [{ id: "workspace-1", name: "Ada Studio", slug: "ada" }],
     } as never);
-    vi.mocked(workspaceGateway.getWorkspace).mockResolvedValue({
-      data: { members: [{ role: "analyst,editor", userId: "member-1" }] },
+    vi.mocked(workspaceGateway.getMembership).mockResolvedValue({
+      data: { role: "analyst,editor" },
     } as never);
 
     render(<App />);
@@ -316,14 +594,15 @@ describe("App", () => {
     vi.mocked(workspaceGateway.listWorkspaces).mockResolvedValue({
       data: [{ id: "workspace-1", name: "Ada Studio", slug: "ada" }],
     } as never);
-    vi.mocked(workspaceGateway.getWorkspace).mockResolvedValue({
-      data: { members: [{ role: "analyst", userId: "member-1" }] },
+    vi.mocked(workspaceGateway.getMembership).mockResolvedValue({
+      data: { role: "analyst" },
     } as never);
 
     render(<App />);
 
     expect(await screen.findByText(/cannot publish links/i)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Publish link" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Create invitation" })).not.toBeInTheDocument();
   });
 
   it("shows workspace-scoped aggregate analytics to an analyst", async () => {
@@ -333,8 +612,8 @@ describe("App", () => {
     vi.mocked(workspaceGateway.listWorkspaces).mockResolvedValue({
       data: [{ id: "workspace-1", name: "Ada Studio", slug: "ada" }],
     } as never);
-    vi.mocked(workspaceGateway.getWorkspace).mockResolvedValue({
-      data: { members: [{ role: "analyst", userId: "member-1" }] },
+    vi.mocked(workspaceGateway.getMembership).mockResolvedValue({
+      data: { role: "analyst" },
     } as never);
     vi.mocked(analyticsGateway.getOverview).mockResolvedValue({
       data: {

@@ -46,6 +46,11 @@ Credentials and session tokens are secret. Invitation IDs and destination URLs a
 Raw IPs and raw user-agent strings are forbidden from storage and logs. A keyed daily visitor
 identifier is scoped to the organization, link, and UTC day, expires at the next UTC midnight, and
 is physically removed within a bounded five-minute cleanup grace.
+Invitation IDs are opaque capabilities. They live in a dashboard URL fragment rather than a request
+URL, are removed from browser history after capture, and are never logged. Pending invitation rows
+retain the invited email until acceptance, cancellation, or expiry. Accepted and cancelled rows are
+deleted immediately; expired rows are pruned at least every five minutes. An overdue prune is a
+retention breach.
 Launch stores `Unknown` country, a coarse device category, and a normalized referrer host only.
 Per-link daily referrer storage is capped at 100 hosts, with overflow aggregated as `other`.
 Aggregates expire after 12 months. Production must run the prune command at least every five

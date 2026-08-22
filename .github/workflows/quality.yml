@@ -39,7 +39,29 @@ jobs:
       - run: docker compose up -d --build
       - name: Wait for the local API
         run: bash scripts/wait-for-local-stack.sh
+      - name: Build the production API image
+        run: docker build --target production --tag short-it-api-production-test --file apps/api/Dockerfile .
+      - name: Smoke-test invitation pruning in the production API image
+        run: >-
+          docker run --rm --network short-it_private
+          -e ANALYTICS_VISITOR_SECRET=abcdef0123456789abcdef0123456789
+          -e APP_BASE_DOMAIN=example.test
+          -e BETTER_AUTH_SECRET=0123456789abcdef0123456789abcdef
+          -e BETTER_AUTH_URL=https://app.example.test
+          -e DATABASE_URL=postgresql://shortit:shortit@postgres:5432/shortit?schema=public
+          -e TRUSTED_ORIGINS=https://app.example.test
+          short-it-api-production-test node apps/api/dist/auth/prune-invitations.js
       - run: BDD_BASE_URL=http://app.localhost:8080 pnpm bdd
+      - name: Restart the local API for workspace invitations
+        run: docker compose restart api
+      - name: Wait for the local API before workspace invitations
+        run: bash scripts/wait-for-local-stack.sh
+      - run: BDD_BASE_URL=http://app.localhost:8080 pnpm bdd:invitations
+      - name: Restart the local API for invitation edge cases
+        run: docker compose restart api
+      - name: Wait for the local API before invitation edge cases
+        run: bash scripts/wait-for-local-stack.sh
+      - run: BDD_BASE_URL=http://app.localhost:8080 pnpm bdd:invitation-edge
       - name: Restart the local API for analytics overview
         run: docker compose restart api
       - name: Wait for the local API before analytics overview

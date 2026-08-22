@@ -17,7 +17,6 @@ const workspaceRolePermissions = {
   },
   editor: {
     analytics: ["read"],
-    invitation: ["create", "cancel"],
     link: ["create", "read", "delete"],
   },
   owner: {
@@ -40,6 +39,20 @@ export function canCreateLinks(role: string): boolean {
     const permissions =
       workspaceRolePermissions[assignedRole as keyof typeof workspaceRolePermissions];
     return (permissions?.link as readonly string[] | undefined)?.includes("create") ?? false;
+  });
+}
+
+export function canManageInvitations(role: string): boolean {
+  return role.split(",").some((assignedRole) => {
+    const permissions =
+      workspaceRolePermissions[assignedRole as keyof typeof workspaceRolePermissions];
+    const invitationPermissions =
+      permissions && "invitation" in permissions
+        ? (permissions.invitation as readonly string[])
+        : undefined;
+    return (
+      invitationPermissions?.includes("create") === true && invitationPermissions.includes("cancel")
+    );
   });
 }
 

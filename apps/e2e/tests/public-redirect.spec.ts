@@ -4,6 +4,8 @@ import { expect, test } from "@playwright/test";
 test("a tenant host exposes only a query-free public redirect", async ({ page }) => {
   const suffix = randomUUID().replaceAll("-", "").slice(0, 12);
   const workspaceHandle = `redirect${suffix}`;
+  const publicOrigin = new URL(process.env.E2E_BASE_URL ?? "http://app.localhost:8080");
+  publicOrigin.hostname = `${workspaceHandle}.localhost`;
 
   await page.goto("/");
   await page.getByRole("button", { name: "Create a workspace" }).click();
@@ -24,10 +26,8 @@ test("a tenant host exposes only a query-free public redirect", async ({ page })
   const slug = linkText?.match(/c[a-z0-9]{24}/)?.[0];
   expect(slug).toBeTruthy();
 
-  const redirect = await page.request.get(
-    `http://${workspaceHandle}.localhost:8080/${slug}?campaign=ignored`,
-    { maxRedirects: 0 },
-  );
+  const redirectUrl = new URL(`/${slug}?campaign=ignored`, publicOrigin).href;
+  const redirect = await page.request.get(redirectUrl, { maxRedirects: 0 });
   expect(redirect.status()).toBe(302);
   expect(redirect.headers()).toMatchObject({
     "cache-control": "no-store",
@@ -43,15 +43,12 @@ test("a tenant host exposes only a query-free public redirect", async ({ page })
       await route.fulfill({ body: "<title>Tenant</title>", contentType: "text/html", status: 200 });
     },
   );
-  const tenantNavigation = await page.goto(
-    `http://${workspaceHandle}.localhost:8080/${slug}?cookie-proof=1`,
-  );
+  const tenantNavigation = await page.goto(new URL(`/${slug}?cookie-proof=1`, publicOrigin).href);
   expect(tenantNavigation?.status()).toBe(200);
   expect(tenantCookieHeader).toBeUndefined();
 
-  const blockedRoute = await page.request.get(
-    `http://${workspaceHandle}.localhost:8080/api/health`,
-    { maxRedirects: 0 },
-  );
+  const blockedRoute = await page.request.get(new URL("/api/health", publicOrigin).href, {
+    maxRedirects: 0,
+  });
   expect(blockedRoute.status()).toBe(404);
 });
