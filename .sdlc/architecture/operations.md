@@ -85,6 +85,10 @@ must run `node apps/api/dist/auth/prune-invitations.js` in the production API im
 five minutes and alert on a failed run or no successful run for ten minutes. An overdue invitation
 prune is a retention breach.
 
+Workspace and account deletion are irreversible application actions. Code rollback cannot recover
+their records. Before production, the selected provider must supply tested backup and restore
+evidence before users are offered deletion in a hosted environment.
+
 ## Migrations and rollback
 
 Prisma migrations must run before an API image that relies on them. Migrations are additive

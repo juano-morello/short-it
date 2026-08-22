@@ -10,6 +10,8 @@ vi.mock("./workspace-gateway.js", () => ({
     acceptInvitation: vi.fn(),
     cancelInvitation: vi.fn(),
     createWorkspace: vi.fn(),
+    deleteAccount: vi.fn(),
+    deleteWorkspace: vi.fn(),
     getMembership: vi.fn(),
     getSession: vi.fn(),
     inviteMember: vi.fn(),
@@ -634,6 +636,70 @@ describe("App", () => {
     expect(screen.getByText("DAILY UNIQUE LINK VISITORS")).toBeInTheDocument();
     expect(screen.getByText("Unknown")).toBeInTheDocument();
     expect(analyticsGateway.getOverview).toHaveBeenCalledWith("workspace-1");
+  });
+
+  it("requires the exact workspace handle before an owner deletes a workspace", async () => {
+    vi.mocked(workspaceGateway.getSession).mockResolvedValue({
+      data: { user: { email: "owner@example.test", id: "owner-1" } },
+    } as never);
+    vi.mocked(workspaceGateway.listWorkspaces)
+      .mockResolvedValueOnce({
+        data: [{ id: "workspace-1", name: "Ada Studio", slug: "ada" }],
+      } as never)
+      .mockResolvedValueOnce({ data: [] } as never);
+    vi.mocked(workspaceGateway.getMembership).mockResolvedValue({
+      data: { role: "owner" },
+    } as never);
+    vi.mocked(workspaceGateway.deleteWorkspace).mockResolvedValue({ data: {} } as never);
+
+    render(<App />);
+
+    await screen.findByRole("heading", { name: "Ada Studio" });
+    fireEvent.change(screen.getByLabelText("Confirm workspace handle"), {
+      target: { value: "wrong" },
+    });
+    fireEvent.submit(getForm("Delete workspace permanently"));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Enter the exact workspace handle to delete this workspace.",
+    );
+    expect(workspaceGateway.deleteWorkspace).not.toHaveBeenCalled();
+
+    fireEvent.change(screen.getByLabelText("Confirm workspace handle"), {
+      target: { value: "ada" },
+    });
+    fireEvent.submit(getForm("Delete workspace permanently"));
+
+    expect(
+      await screen.findByRole("heading", { name: "Create your workspace" }),
+    ).toBeInTheDocument();
+    expect(workspaceGateway.deleteWorkspace).toHaveBeenCalledWith("workspace-1");
+  });
+
+  it("returns a non-owner to the signed-out landing screen after account deletion", async () => {
+    vi.mocked(workspaceGateway.getSession)
+      .mockResolvedValueOnce({
+        data: { user: { email: "member@example.test", id: "member-1" } },
+      } as never)
+      .mockResolvedValueOnce({ data: null } as never);
+    vi.mocked(workspaceGateway.listWorkspaces).mockResolvedValue({
+      data: [{ id: "workspace-1", name: "Ada Studio", slug: "ada" }],
+    } as never);
+    vi.mocked(workspaceGateway.getMembership).mockResolvedValue({
+      data: { role: "editor" },
+    } as never);
+    vi.mocked(workspaceGateway.deleteAccount).mockResolvedValue({ data: {} } as never);
+
+    render(<App />);
+
+    await screen.findByRole("heading", { name: "Ada Studio" });
+    fireEvent.change(screen.getByLabelText("Confirm account email"), {
+      target: { value: "member@example.test" },
+    });
+    fireEvent.submit(getForm("Delete account permanently"));
+
+    expect(await screen.findByRole("button", { name: "Create a workspace" })).toBeInTheDocument();
+    expect(workspaceGateway.deleteAccount).toHaveBeenCalledWith("member@example.test");
   });
 });
 

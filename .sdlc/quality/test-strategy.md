@@ -9,6 +9,8 @@ tenant-scoped authorization. WORK-004 covers public-host redirects, redirect-tim
 validation, and tenant-route isolation. WORK-005 covers privacy-preserving redirect analytics,
 authenticated workspace reporting, and aggregate retention. WORK-006 covers owner-only invitation
 creation, matching-email acceptance with confirmation, role scope, atomic cancellation, and retention.
+WORK-007 covers owner-only workspace deletion, account-deletion ownership checks, typed
+confirmation, and cascade behavior.
 
 ## Outside-in TDD workflow
 
@@ -39,6 +41,8 @@ WORK-005 follows a public redirect through to the dashboard's aggregate analytic
 best-effort persistence before asserting presentation. WORK-006 adds an owner-to-recipient browser
 flow that verifies copied fragment capabilities require explicit acceptance. Storybook documents
 dashboard components and supports future visual checks.
+WORK-007 adds browser coverage for workspace-handle and account-email confirmation, and returns the
+user to onboarding or the signed-out landing screen after deletion.
 
 ## Test data and isolation
 
@@ -66,7 +70,8 @@ deferred until hosting is selected.
 
 Run `pnpm format:check`, `pnpm lint`, `pnpm typecheck`, `pnpm test`,
 `pnpm test:integration`, `pnpm bdd`, `pnpm bdd:analytics`, `pnpm bdd:invitations`,
-`pnpm bdd:invitation-edge`, `pnpm bdd:publication-guardrails`, `pnpm bdd:rate-limit`, `pnpm e2e`, `pnpm coverage`,
+`pnpm bdd:invitation-edge`, `pnpm bdd:publication-guardrails`, `pnpm bdd:rate-limit`,
+`pnpm bdd:workspace-lifecycle`, `pnpm e2e`, `pnpm coverage`,
 `pnpm db:validate`, `pnpm storybook:build`, `pnpm compose:config`,
 `pnpm docker:build`, and `pnpm security`.
 

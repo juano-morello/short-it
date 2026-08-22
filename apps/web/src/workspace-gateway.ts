@@ -24,6 +24,34 @@ export const workspaceGateway = {
   },
   createWorkspace: (input: { name: string; slug: string }) =>
     authClient.organization.create({ keepCurrentActiveOrganization: true, ...input }),
+  deleteAccount: async (confirmationEmail: string) => {
+    try {
+      const response = await fetch("/api/account", {
+        body: JSON.stringify({ confirmationEmail }),
+        credentials: "same-origin",
+        headers: { "content-type": "application/json" },
+        method: "DELETE",
+      });
+      return response.ok ? { data: {} } : { error: { message: "Account deletion was rejected." } };
+    } catch {
+      return { error: { message: "Account deletion was unavailable." } };
+    }
+  },
+  deleteWorkspace: async (organizationId: string) => {
+    try {
+      const response = await fetch("/api/auth/organization/delete", {
+        body: JSON.stringify({ organizationId }),
+        credentials: "same-origin",
+        headers: { "content-type": "application/json" },
+        method: "POST",
+      });
+      return response.ok
+        ? { data: {} }
+        : { error: { message: "Workspace deletion was rejected." } };
+    } catch {
+      return { error: { message: "Workspace deletion was unavailable." } };
+    }
+  },
   getSession: () => authClient.getSession(),
   getMembership: async (organizationId: string) => {
     try {

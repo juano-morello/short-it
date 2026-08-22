@@ -40,6 +40,13 @@ The single-instance demo keeps attempt windows and quota check/write coordinatio
 the link count remains durable in PostgreSQL. A shared limiter and quota coordination are
 prerequisites for multi-instance production deployment.
 
+Workspace deletion relies on Better Auth's owner-only organization-delete permission. The dashboard
+requires the workspace handle to reduce accidental deletion. Account deletion accepts only the
+authenticated session's matching email, checks every membership for an owner role, and deletes the
+session-derived user record. A caller who owns a workspace receives no deletion. Typed confirmation
+is an accidental-action control, not fresh authentication; a compromised fresh session remains an
+accepted launch risk until stronger reauthentication is added.
+
 ## Data classification and lifecycle
 
 Credentials and session tokens are secret. Invitation IDs and destination URLs are sensitive.

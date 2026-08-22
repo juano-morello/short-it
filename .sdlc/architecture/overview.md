@@ -48,6 +48,13 @@ browser fragment, are cleared from history before network work, and require an e
 matching-email acceptance. Accepted and cancelled rows are deleted immediately; a five-minute job
 removes expired pending rows and any terminal-row cleanup residue.
 
+An owner may delete a workspace through Better Auth's static organization-delete permission. The
+dashboard requires the workspace handle before submitting that irreversible request. An
+authenticated account-deletion endpoint derives the caller from the session, requires the matching
+account email, rejects any owner membership, and deletes only that user record. Database cascades
+remove the deleted workspace's scoped records and the deleted account's sessions, credentials, and
+memberships.
+
 ## Integrations and public contracts
 
 The dashboard and API share the trusted `app.<domain>` origin. Better Auth session cookies
