@@ -3,12 +3,12 @@ import { isIP } from "node:net";
 import { BadRequestException, Logger, ServiceUnavailableException } from "@nestjs/common";
 
 type AddressResolver = (hostname: string) => Promise<Array<{ address: string }>>;
+type AddressFamilyResolver = (hostname: string) => Promise<string[]>;
 type IpRange = readonly [network: string, prefixLength: number];
 
 const resolutionLogger = new Logger("DestinationPolicy");
 const resolutionTimeoutMs = 2_000;
 const maximumConcurrentResolutions = 10;
-let activeResolutions = 0;
 
 // IANA Special-Purpose Address registries, reviewed 2026-08-21.
 const nonPublicIpv4Ranges: readonly IpRange[] = [
@@ -55,27 +55,54 @@ const defaultAddressResolver: AddressResolver = async (hostname) => {
     return [{ address: normalizedHostname }];
   }
 
-  const results = await Promise.allSettled([
-    resolve4(normalizedHostname),
-    resolve6(normalizedHostname),
-  ]);
+  return resolvePublicDnsAddresses(normalizedHostname);
+};
+
+export async function resolvePublicDnsAddresses(
+  hostname: string,
+  resolveIpv4: AddressFamilyResolver = resolve4,
+  resolveIpv6: AddressFamilyResolver = resolve6,
+): Promise<Array<{ address: string }>> {
+  const results = await Promise.allSettled([resolveIpv4(hostname), resolveIpv6(hostname)]);
+  const failures = results.filter(
+    (result): result is PromiseRejectedResult => result.status === "rejected",
+  );
+  const resolverFailure = failures.find(
+    (failure) => !isDefinitiveAddressFamilyAbsence(failure.reason),
+  );
+  if (resolverFailure) {
+    throw resolverFailure.reason;
+  }
   const addresses = results.flatMap((result) =>
     result.status === "fulfilled" ? result.value.map((address) => ({ address })) : [],
   );
   if (addresses.length) {
     return addresses;
   }
-  const failures = results.filter(
-    (result): result is PromiseRejectedResult => result.status === "rejected",
-  );
-  const transientFailure = failures.find((failure) => isTransientResolutionError(failure.reason));
-  throw transientFailure?.reason ?? failures[0]?.reason ?? new Error("DNS resolution failed.");
-};
+  throw failures[0]?.reason ?? new Error("DNS resolution failed.");
+}
 
 export async function assertSafeDestinationUrl(
   value: unknown,
   resolveAddresses: AddressResolver = defaultAddressResolver,
   requestId?: string,
+): Promise<string> {
+  return assertSafeUrl(value, resolveAddresses, requestId, publicationResolutionPool);
+}
+
+export async function assertSafeRedirectDestinationUrl(
+  value: unknown,
+  resolveAddresses: AddressResolver = defaultAddressResolver,
+  requestId?: string,
+): Promise<string> {
+  return assertSafeUrl(value, resolveAddresses, requestId, redirectResolutionPool);
+}
+
+async function assertSafeUrl(
+  value: unknown,
+  resolveAddresses: AddressResolver,
+  requestId: string | undefined,
+  resolutionPool: ResolutionPool,
 ): Promise<string> {
   if (typeof value !== "string" || !value.trim()) {
     throw new BadRequestException("A link destination is required.");
@@ -98,7 +125,7 @@ export async function assertSafeDestinationUrl(
     throw new BadRequestException("Link destinations must not resolve privately.");
   }
 
-  const addresses = await resolvePublicAddresses(url.hostname, resolveAddresses, requestId);
+  const addresses = await resolutionPool.resolve(url.hostname, resolveAddresses, requestId);
   if (!addresses.length || addresses.some(({ address }) => isPrivateOrReservedAddress(address))) {
     throw new BadRequestException("Link destinations must not resolve privately.");
   }
@@ -106,38 +133,65 @@ export async function assertSafeDestinationUrl(
   return url.toString();
 }
 
-async function resolvePublicAddresses(
-  hostname: string,
-  resolveAddresses: AddressResolver,
-  requestId: string | undefined,
-): Promise<Array<{ address: string }>> {
-  if (activeResolutions >= maximumConcurrentResolutions) {
-    logResolution("capacity-exhausted", 0, requestId);
-    throw new ServiceUnavailableException("Destination validation is temporarily unavailable.");
-  }
+class ResolutionPool {
+  private activeResolutions = 0;
+  private readonly inFlight = new Map<string, Promise<Array<{ address: string }>>>();
 
-  activeResolutions += 1;
-  const resolution = Promise.resolve().then(() => resolveAddresses(hostname));
-  void resolution.then(releaseResolution, releaseResolution);
-  const startedAt = performance.now();
-  try {
-    const addresses = await resolveWithTimeout(resolution);
-    logResolution("resolved", performance.now() - startedAt, requestId);
-    return addresses;
-  } catch (error) {
-    const elapsedMs = performance.now() - startedAt;
-    if (isTransientResolutionError(error)) {
-      logResolution("unavailable", elapsedMs, requestId);
-      throw new ServiceUnavailableException("Destination validation is temporarily unavailable.");
+  constructor(
+    private readonly event: string,
+    private readonly coalesceInFlight: boolean,
+  ) {}
+
+  async resolve(
+    hostname: string,
+    resolveAddresses: AddressResolver,
+    requestId: string | undefined,
+  ): Promise<Array<{ address: string }>> {
+    let resolution = this.coalesceInFlight ? this.inFlight.get(hostname) : undefined;
+    if (!resolution) {
+      if (this.activeResolutions >= maximumConcurrentResolutions) {
+        logResolution(this.event, "capacity-exhausted", 0, requestId);
+        throw new ServiceUnavailableException("Destination validation is temporarily unavailable.");
+      }
+
+      this.activeResolutions += 1;
+      const startedResolution = Promise.resolve().then(() => resolveAddresses(hostname));
+      resolution = startedResolution;
+      if (this.coalesceInFlight) {
+        this.inFlight.set(hostname, startedResolution);
+      }
+      void startedResolution.then(
+        () => this.release(hostname, startedResolution),
+        () => this.release(hostname, startedResolution),
+      );
     }
-    logResolution("unresolvable", elapsedMs, requestId);
-    throw new BadRequestException("Link destinations must not resolve privately.");
+
+    const startedAt = performance.now();
+    try {
+      const addresses = await resolveWithTimeout(resolution);
+      logResolution(this.event, "resolved", performance.now() - startedAt, requestId);
+      return addresses;
+    } catch (error) {
+      const elapsedMs = performance.now() - startedAt;
+      if (isTransientResolutionError(error)) {
+        logResolution(this.event, "unavailable", elapsedMs, requestId);
+        throw new ServiceUnavailableException("Destination validation is temporarily unavailable.");
+      }
+      logResolution(this.event, "unresolvable", elapsedMs, requestId);
+      throw new BadRequestException("Link destinations must not resolve privately.");
+    }
+  }
+
+  private release(hostname: string, resolution: Promise<Array<{ address: string }>>): void {
+    this.activeResolutions -= 1;
+    if (this.inFlight.get(hostname) === resolution) {
+      this.inFlight.delete(hostname);
+    }
   }
 }
 
-function releaseResolution(): void {
-  activeResolutions -= 1;
-}
+const publicationResolutionPool = new ResolutionPool("link_destination_resolution", false);
+const redirectResolutionPool = new ResolutionPool("redirect_destination_resolution", true);
 
 function isLocalHostname(hostname: string): boolean {
   const normalized = hostname.toLowerCase();
@@ -169,15 +223,35 @@ function isTransientResolutionError(error: unknown): boolean {
     typeof error === "object" &&
     error !== null &&
     "code" in error &&
-    (error.code === "EAI_AGAIN" || error.code === "ETIMEOUT")
+    (error.code === "EAI_AGAIN" ||
+      error.code === "ECONNREFUSED" ||
+      error.code === "ECONNRESET" ||
+      error.code === "EHOSTUNREACH" ||
+      error.code === "ENETUNREACH" ||
+      error.code === "ESERVFAIL" ||
+      error.code === "ETIMEOUT")
   );
 }
 
-function logResolution(outcome: string, durationMs: number, requestId: string | undefined): void {
+function isDefinitiveAddressFamilyAbsence(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    (error.code === "ENODATA" || error.code === "ENOTFOUND")
+  );
+}
+
+function logResolution(
+  event: string,
+  outcome: string,
+  durationMs: number,
+  requestId: string | undefined,
+): void {
   resolutionLogger.log(
     JSON.stringify({
       durationMs: Math.round(durationMs),
-      event: "link_destination_resolution",
+      event,
       outcome,
       requestId: requestId ?? "unavailable",
     }),

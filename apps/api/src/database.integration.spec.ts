@@ -1,10 +1,11 @@
 import { execFileSync } from "node:child_process";
-import { ConflictException, ForbiddenException } from "@nestjs/common";
+import { ConflictException, ForbiddenException, NotFoundException } from "@nestjs/common";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from "@testcontainers/postgresql";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { LinksService } from "./links/links.service.js";
+import { PublicRedirectService } from "./redirect/public-redirect.service.js";
 
 describe("PostgreSQL integration", () => {
   let container: StartedPostgreSqlContainer;
@@ -177,5 +178,41 @@ describe("PostgreSQL integration", () => {
         where: { organizationId: "workspace-quota", publishedAt: { not: null } },
       }),
     ).resolves.toBe(1_000);
+  });
+
+  it("resolves a published link only through its own workspace host", async () => {
+    await testPrisma.organization.createMany({
+      data: [
+        { id: "redirect-workspace", name: "Redirect Workspace", slug: "redirect-workspace" },
+        { id: "other-workspace", name: "Other Workspace", slug: "other-workspace" },
+      ],
+    });
+    const link = await testPrisma.link.create({
+      data: {
+        destinationUrl: "https://public.example/portfolio",
+        organizationId: "redirect-workspace",
+        publishedAt: new Date(),
+      },
+    });
+    const service = PublicRedirectService.forTesting({
+      baseDomain: "short.it",
+      database: testPrisma as never,
+      validateDestination: async (destinationUrl) => {
+        if (typeof destinationUrl !== "string") throw new Error("Expected a destination URL.");
+        return destinationUrl;
+      },
+    });
+
+    await expect(
+      service.resolve({ host: "redirect-workspace.short.it", slug: link.slug }),
+    ).resolves.toBe("https://public.example/portfolio");
+    await expect(
+      service.resolve({ host: "other-workspace.short.it", slug: link.slug }),
+    ).rejects.toEqual(new NotFoundException());
+
+    await testPrisma.link.update({ data: { publishedAt: null }, where: { id: link.id } });
+    await expect(
+      service.resolve({ host: "redirect-workspace.short.it", slug: link.slug }),
+    ).rejects.toEqual(new NotFoundException());
   });
 });

@@ -10,6 +10,7 @@ import {
 import type { Request } from "express";
 import { auth } from "../auth/auth.js";
 import { getConfig } from "../config.js";
+import { getRequestId } from "../request-id.js";
 import { LinksService } from "./links.service.js";
 
 type CreateLinkBody = {
@@ -36,11 +37,6 @@ export class LinksController {
       userId: session.user.id,
     });
   }
-}
-
-function getRequestId(request: Request): string {
-  const value = request.get("x-request-id");
-  return value && /^[a-zA-Z0-9_-]{1,64}$/.test(value) ? value : crypto.randomUUID();
 }
 
 function assertTrustedOrigin(request: Request): void {

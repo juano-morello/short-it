@@ -1,5 +1,5 @@
 :8080 {
-  @dashboard host app.localhost
+  @dashboard host app.{$APP_BASE_DOMAIN:localhost}
 
   handle @dashboard {
     handle /api/* {
@@ -16,8 +16,18 @@
     }
   }
 
-  # Tenant hosts are redirect-only. Until public slug resolution ships, reject
-  # every request rather than exposing dashboard or authentication routes.
+  @public-link {
+    host *.{$APP_BASE_DOMAIN:localhost}
+    method GET HEAD
+    path_regexp published_link ^/c[a-z0-9]{24}$
+  }
+
+  # Tenant hosts expose only public CUID redirects. Their host is retained for
+  # the API's independently validated tenant lookup.
+  handle @public-link {
+    reverse_proxy api:3000
+  }
+
   handle {
     respond "Not found" 404
   }

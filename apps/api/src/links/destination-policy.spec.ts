@@ -1,6 +1,10 @@
 import { BadRequestException, ServiceUnavailableException } from "@nestjs/common";
 import { describe, expect, it, vi } from "vitest";
-import { assertSafeDestinationUrl } from "./destination-policy.js";
+import {
+  assertSafeDestinationUrl,
+  assertSafeRedirectDestinationUrl,
+  resolvePublicDnsAddresses,
+} from "./destination-policy.js";
 
 describe("assertSafeDestinationUrl", () => {
   it("normalizes a public HTTP(S) destination after resolving every address", async () => {
@@ -179,5 +183,132 @@ describe("assertSafeDestinationUrl", () => {
         { address: "2606:4700::1111" },
       ]),
     ).resolves.toBe("https://public.example/");
+  });
+});
+
+describe("assertSafeRedirectDestinationUrl", () => {
+  it("revalidates every sequential redirect without retaining a DNS result", async () => {
+    const resolveAddresses = vi.fn(async () => [{ address: "93.184.216.34" }]);
+
+    await assertSafeRedirectDestinationUrl("https://public.example", resolveAddresses);
+    await assertSafeRedirectDestinationUrl("https://public.example", resolveAddresses);
+
+    expect(resolveAddresses).toHaveBeenCalledTimes(2);
+  });
+
+  it("coalesces only concurrent redirect validations for the same hostname", async () => {
+    let settleResolution: ((addresses: Array<{ address: string }>) => void) | undefined;
+    const resolveAddresses = vi.fn(
+      async () =>
+        new Promise<Array<{ address: string }>>((resolve) => {
+          settleResolution = resolve;
+        }),
+    );
+
+    const first = assertSafeRedirectDestinationUrl("https://public.example", resolveAddresses);
+    const second = assertSafeRedirectDestinationUrl(
+      "https://public.example/path",
+      resolveAddresses,
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(resolveAddresses).toHaveBeenCalledTimes(1);
+
+    settleResolution?.([{ address: "93.184.216.34" }]);
+    await expect(first).resolves.toBe("https://public.example/");
+    await expect(second).resolves.toBe("https://public.example/path");
+  });
+
+  it("keeps redirect-time resolution capacity independent from link publication capacity", async () => {
+    const settlePublicationResolutions: Array<(addresses: Array<{ address: string }>) => void> = [];
+    const publicationRequests = Array.from({ length: 10 }, (_, index) =>
+      assertSafeDestinationUrl(
+        `https://publication-${index}.example`,
+        async () =>
+          new Promise<Array<{ address: string }>>((resolve) => {
+            settlePublicationResolutions.push(resolve);
+          }),
+      ),
+    );
+    await Promise.resolve();
+    await Promise.resolve();
+
+    await expect(
+      assertSafeRedirectDestinationUrl("https://redirect.example", async () => [
+        { address: "93.184.216.34" },
+      ]),
+    ).resolves.toBe("https://redirect.example/");
+
+    for (const settle of settlePublicationResolutions) {
+      settle([{ address: "93.184.216.34" }]);
+    }
+    await Promise.all(publicationRequests);
+  });
+
+  it("returns retryable capacity exhaustion after ten distinct pending redirects", async () => {
+    const settleResolutions: Array<(addresses: Array<{ address: string }>) => void> = [];
+    const pendingRequests = Array.from({ length: 10 }, (_, index) =>
+      assertSafeRedirectDestinationUrl(
+        `https://redirect-${index}.example`,
+        async () =>
+          new Promise<Array<{ address: string }>>((resolve) => {
+            settleResolutions.push(resolve);
+          }),
+      ),
+    );
+
+    await expect(
+      assertSafeRedirectDestinationUrl("https://over-capacity.example", async () => [
+        { address: "93.184.216.34" },
+      ]),
+    ).rejects.toEqual(
+      new ServiceUnavailableException("Destination validation is temporarily unavailable."),
+    );
+
+    await Promise.resolve();
+    await Promise.resolve();
+    for (const settle of settleResolutions) {
+      settle([{ address: "93.184.216.34" }]);
+    }
+    await Promise.all(pendingRequests);
+  });
+
+  it.each(["ESERVFAIL", "ECONNREFUSED"])(
+    "treats %s as retryable redirect-time DNS failure",
+    async (code) => {
+      await expect(
+        assertSafeRedirectDestinationUrl("https://temporary.example", async () => {
+          throw Object.assign(new Error("DNS resolver unavailable"), { code });
+        }),
+      ).rejects.toEqual(
+        new ServiceUnavailableException("Destination validation is temporarily unavailable."),
+      );
+    },
+  );
+});
+
+describe("resolvePublicDnsAddresses", () => {
+  it("does not accept one address family while the other has a resolver failure", async () => {
+    await expect(
+      resolvePublicDnsAddresses(
+        "public.example",
+        async () => ["93.184.216.34"],
+        async () => {
+          throw Object.assign(new Error("DNS server failure"), { code: "ESERVFAIL" });
+        },
+      ),
+    ).rejects.toMatchObject({ code: "ESERVFAIL" });
+  });
+
+  it("permits a definitive absence from one address family", async () => {
+    await expect(
+      resolvePublicDnsAddresses(
+        "public.example",
+        async () => ["93.184.216.34"],
+        async () => {
+          throw Object.assign(new Error("No IPv6 data"), { code: "ENODATA" });
+        },
+      ),
+    ).resolves.toEqual([{ address: "93.184.216.34" }]);
   });
 });

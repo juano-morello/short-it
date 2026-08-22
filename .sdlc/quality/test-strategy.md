@@ -5,8 +5,8 @@
 Core product slices use executable Gherkin. The scaffold begins with the health-probe feature.
 WORK-002 covers registration, workspace ownership, safe handle creation, and isolated rate-limit
 behavior. WORK-003 covers server-generated CUID link publication, destination safety, and
-tenant-scoped authorization. Future slices cover redirect-first behavior, analytics, and deletion
-lifecycle.
+tenant-scoped authorization. WORK-004 covers public-host redirects, redirect-time destination
+validation, and tenant-route isolation. Future slices cover analytics and deletion lifecycle.
 
 ## Outside-in TDD workflow
 
@@ -15,7 +15,8 @@ minimum behavior, then add focused unit tests for policy and transformation edge
 
 ## Unit tests
 
-Vitest covers controllers, destination policy, aggregation, role policy, and UI components.
+Vitest covers controllers, destination policy, public-host parsing, aggregation, role policy, and UI
+components.
 The scaffold includes a health controller and dashboard metric-card test. WORK-002 adds
 session-aware onboarding, sign-in, account-error, and workspace-retry UI coverage. Its rate-limit
 scenario runs alone against a fresh Compose stack because its counter is intentionally process-local.
@@ -30,8 +31,9 @@ reserved for a future public or cross-client API.
 ## E2E and visual regression
 
 Playwright owns browser flows. WORK-002 adds a real browser scenario that registers an account,
-signs in, creates a workspace, and verifies the owner dashboard. Storybook documents dashboard
-components and supports future visual checks.
+signs in, creates a workspace, and verifies the owner dashboard. WORK-004 creates a published link,
+checks its public redirect response, and proves a dashboard cookie is not sent to the tenant host.
+Storybook documents dashboard components and supports future visual checks.
 
 ## Test data and isolation
 
@@ -48,8 +50,10 @@ instead verified through the live Compose migration, probe, signup, and browser 
 
 ## Performance and resilience
 
-Before public release, test redirect behavior when telemetry, aggregation, and optional
-enrichment fail. Load and latency targets are deferred until hosting is selected.
+WORK-004 tests redirect-time DNS revalidation, family-resolution failures, timeout, capacity
+exhaustion, and concurrent same-host coalescing. Before analytics ships, test valid redirects when
+telemetry, aggregation, and optional enrichment fail. Load and latency targets are deferred until
+hosting is selected.
 
 ## CI gates and exact commands
 
