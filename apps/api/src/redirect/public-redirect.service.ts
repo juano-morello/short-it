@@ -12,6 +12,12 @@ type PublicRedirectInput = {
   slug: string;
 };
 
+export type ResolvedPublicRedirect = {
+  destinationUrl: string;
+  linkId: string;
+  organizationId: string;
+};
+
 type PublicRedirectDependencies = {
   baseDomain: string;
   database: RedirectDatabase;
@@ -32,7 +38,7 @@ export class PublicRedirectService {
     return service;
   }
 
-  async resolve(input: PublicRedirectInput): Promise<string> {
+  async resolve(input: PublicRedirectInput): Promise<ResolvedPublicRedirect> {
     const workspaceHandle = getPublicWorkspaceHandle(input.host, this.dependencies.baseDomain);
     if (!workspaceHandle || !isPublishedLinkSlug(input.slug)) {
       throw new NotFoundException();
@@ -47,7 +53,7 @@ export class PublicRedirectService {
     }
 
     const link = await this.dependencies.database.link.findUnique({
-      select: { destinationUrl: true, publishedAt: true },
+      select: { destinationUrl: true, id: true, publishedAt: true },
       where: { organizationId_slug: { organizationId: organization.id, slug: input.slug } },
     });
     if (!link?.publishedAt) {
@@ -55,11 +61,15 @@ export class PublicRedirectService {
     }
 
     try {
-      return await this.dependencies.validateDestination(
-        link.destinationUrl,
-        undefined,
-        input.requestId,
-      );
+      return {
+        destinationUrl: await this.dependencies.validateDestination(
+          link.destinationUrl,
+          undefined,
+          input.requestId,
+        ),
+        linkId: link.id,
+        organizationId: organization.id,
+      };
     } catch (error) {
       if (error instanceof BadRequestException) {
         throw new NotFoundException();

@@ -23,13 +23,17 @@ describe("PublicRedirectService", () => {
 
     await expect(
       service.resolve({ host: "studio.short.it", requestId: "redirect-123", slug }),
-    ).resolves.toBe("https://public.example/portfolio");
+    ).resolves.toEqual({
+      destinationUrl: "https://public.example/portfolio",
+      linkId: "link-1",
+      organizationId: "workspace-1",
+    });
     expect(database.organization.findUnique).toHaveBeenCalledWith({
       select: { id: true },
       where: { slug: "studio" },
     });
     expect(database.link.findUnique).toHaveBeenCalledWith({
-      select: { destinationUrl: true, publishedAt: true },
+      select: { destinationUrl: true, id: true, publishedAt: true },
       where: { organizationId_slug: { organizationId: "workspace-1", slug } },
     });
     expect(validateDestination).toHaveBeenCalledWith(
@@ -98,9 +102,11 @@ describe("PublicRedirectService", () => {
   });
 });
 
-function createDatabase(link: { destinationUrl: string; publishedAt: Date | null } | undefined) {
+function createDatabase(
+  link: { destinationUrl: string; id?: string; publishedAt: Date | null } | undefined,
+) {
   return {
-    link: { findUnique: vi.fn().mockResolvedValue(link) },
+    link: { findUnique: vi.fn().mockResolvedValue(link && { id: "link-1", ...link }) },
     organization: { findUnique: vi.fn().mockResolvedValue({ id: "workspace-1" }) },
   };
 }

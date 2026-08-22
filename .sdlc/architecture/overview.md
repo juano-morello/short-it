@@ -20,7 +20,7 @@ flowchart LR
   JSON parsing, based on the compatibility spike.
 - `packages/contracts`: shared API shape and role types.
 - `packages/design-system`: pinned CSS token copy from `LBTWorks/DesignSystem`.
-- PostgreSQL: Better Auth, workspace membership, published links, and future aggregate analytics
+- PostgreSQL: Better Auth, workspace membership, published links, and aggregate redirect analytics
   data.
 - Caddy: local host router. `app.localhost` routes dashboard and `/api`; other hosts route
   only to the API redirect surface.
@@ -35,9 +35,10 @@ browser.
 
 Published links use server-generated CUID slugs and their organization-scoped composite key. Public
 redirects resolve a published link from the validated tenant host, then revalidate the stored
-destination before returning a non-cacheable 302 response. Raw IP addresses and raw user-agent
-strings are excluded from analytics storage. A future analytics pipeline derives a keyed daily
-visitor identifier, discards it within 24 hours, and retains only required aggregates for 12 months.
+destination before returning a non-cacheable 302 response. Caddy overwrites a dedicated public
+client-IP header before the API derives a keyed daily visitor digest. Raw IP addresses and raw
+user-agent strings are excluded from analytics storage. Digests expire at the next UTC midnight;
+daily aggregates and dimensions are retained for 12 months.
 
 ## Integrations and public contracts
 

@@ -1,4 +1,5 @@
 import { type FormEvent, type ReactNode, useCallback, useEffect, useState } from "react";
+import { type AnalyticsOverview, analyticsGateway } from "./analytics-gateway.js";
 import { MetricCard } from "./components/MetricCard.js";
 import { linkGateway, type PublishedLink } from "./link-gateway.js";
 import { workspaceGateway } from "./workspace-gateway.js";
@@ -33,6 +34,9 @@ const signInErrorMessage = "We couldn't sign you in. Check your details and try 
 
 export function App() {
   const [error, setError] = useState<string>();
+  const [analyticsError, setAnalyticsError] = useState<string>();
+  const [analyticsOverview, setAnalyticsOverview] = useState<AnalyticsOverview>();
+  const [isAnalyticsLoading, setIsAnalyticsLoading] = useState(false);
   const [form, setForm] = useState(initialForm);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -95,6 +99,23 @@ export function App() {
   useEffect(() => {
     void loadExistingSession();
   }, [loadExistingSession]);
+
+  useEffect(() => {
+    if (!workspace) return;
+    let isCurrent = true;
+    setAnalyticsError(undefined);
+    setAnalyticsOverview(undefined);
+    setIsAnalyticsLoading(true);
+    void analyticsGateway.getOverview(workspace.id).then((result) => {
+      if (!isCurrent) return;
+      if (result.error) setAnalyticsError(result.error);
+      else setAnalyticsOverview(result.data);
+      setIsAnalyticsLoading(false);
+    });
+    return () => {
+      isCurrent = false;
+    };
+  }, [workspace]);
 
   function updateForm(field: keyof typeof form, value: string): void {
     setForm((current) => ({ ...current, [field]: value }));
@@ -215,6 +236,9 @@ export function App() {
     return (
       <Dashboard
         error={error}
+        analyticsError={analyticsError}
+        analyticsOverview={analyticsOverview}
+        isAnalyticsLoading={isAnalyticsLoading}
         isSubmitting={isSubmitting}
         onPublish={handleLinkPublication}
         onUpdateDestination={(value) => updateForm("destinationUrl", value)}
@@ -395,7 +419,10 @@ function AuthLayout({ children, title }: { children: ReactNode; title: string })
 }
 
 function Dashboard({
+  analyticsError,
+  analyticsOverview,
   error,
+  isAnalyticsLoading,
   isSubmitting,
   onPublish,
   onUpdateDestination,
@@ -404,7 +431,10 @@ function Dashboard({
   value,
   workspace,
 }: {
+  analyticsError: string | undefined;
+  analyticsOverview: AnalyticsOverview | undefined;
   error: string | undefined;
+  isAnalyticsLoading: boolean;
   isSubmitting: boolean;
   onPublish: (event: FormEvent<HTMLFormElement>) => Promise<void>;
   onUpdateDestination: (value: string) => void;
@@ -457,8 +487,135 @@ function Dashboard({
             </strong>
           </p>
         ) : null}
+        <AnalyticsPanel
+          error={analyticsError}
+          isLoading={isAnalyticsLoading}
+          overview={analyticsOverview}
+        />
       </section>
     </main>
+  );
+}
+
+function AnalyticsPanel({
+  error,
+  isLoading,
+  overview,
+}: {
+  error: string | undefined;
+  isLoading: boolean;
+  overview: AnalyticsOverview | undefined;
+}) {
+  if (isLoading) {
+    return <p className="analytics-status">Loading analytics…</p>;
+  }
+  if (error) {
+    return (
+      <p className="analytics-status" role="alert">
+        {error}
+      </p>
+    );
+  }
+  if (!overview) return null;
+
+  const clicks = overview.daily.reduce((total, day) => total + day.clicks, 0);
+  const dailyUniqueLinkVisitors = overview.daily.reduce(
+    (total, day) => total + day.dailyUniqueLinkVisitors,
+    0,
+  );
+
+  return (
+    <section className="analytics-panel" aria-labelledby="analytics-title">
+      <div className="analytics-heading">
+        <div>
+          <p className="eyebrow">ANALYTICS / LAST 12 MONTHS</p>
+          <h2 id="analytics-title">Redirect performance</h2>
+        </div>
+        <p className="analytics-note">
+          Aggregated signals only. Redirect delivery always comes first.
+        </p>
+      </div>
+      <div className="analytics-totals">
+        <MetricCard label="TOTAL CLICKS" value={String(clicks)} detail="Successful GET redirects" />
+        <MetricCard
+          label="DAILY UNIQUE LINK VISITORS"
+          value={String(dailyUniqueLinkVisitors)}
+          detail="Summed per-link daily deduplication"
+        />
+      </div>
+      {overview.daily.length === 0 ? (
+        <p className="analytics-status">No redirect analytics have been recorded yet.</p>
+      ) : (
+        <div className="analytics-grid">
+          <AnalyticsTable
+            columns={["Day", "Clicks", "Daily unique link visitors"]}
+            rows={overview.daily
+              .slice(0, 14)
+              .map((day) => [day.date, String(day.clicks), String(day.dailyUniqueLinkVisitors)])}
+            title="Daily totals"
+          />
+          <AnalyticsTable
+            columns={["Country", "Clicks"]}
+            rows={overview.breakdowns.countries
+              .slice(0, 5)
+              .map((item) => [item.value, String(item.clicks)])}
+            title="Countries"
+          />
+          <AnalyticsTable
+            columns={["Device", "Clicks"]}
+            rows={overview.breakdowns.devices
+              .slice(0, 5)
+              .map((item) => [item.value, String(item.clicks)])}
+            title="Devices"
+          />
+          <AnalyticsTable
+            columns={["Referrer", "Clicks"]}
+            rows={overview.breakdowns.referrers
+              .slice(0, 5)
+              .map((item) => [item.value, String(item.clicks)])}
+            title="Referrers"
+          />
+        </div>
+      )}
+    </section>
+  );
+}
+
+function AnalyticsTable({
+  columns,
+  rows,
+  title,
+}: {
+  columns: string[];
+  rows: string[][];
+  title: string;
+}) {
+  return (
+    <section className="analytics-table-wrap" aria-labelledby={`${title.toLowerCase()}-title`}>
+      <h3 id={`${title.toLowerCase()}-title`}>{title}</h3>
+      {rows.length === 0 ? (
+        <p className="analytics-status">No data.</p>
+      ) : (
+        <table>
+          <thead>
+            <tr>
+              {columns.map((column) => (
+                <th key={column}>{column}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => (
+              <tr key={row.join("-")}>
+                {row.map((cell) => (
+                  <td key={cell}>{cell}</td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </section>
   );
 }
 

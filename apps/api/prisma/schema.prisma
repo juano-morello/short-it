@@ -61,15 +61,16 @@ model Verification {
 }
 
 model Organization {
-  id        String   @id
-  name      String
-  slug      String   @unique
-  logo      String?
-  metadata  String?
-  createdAt DateTime @default(now())
-  members   Member[]
-  invitations Invitation[]
-  links     Link[]
+  id                  String                 @id
+  name                String
+  slug                String                 @unique
+  logo                String?
+  metadata            String?
+  createdAt           DateTime               @default(now())
+  members             Member[]
+  invitations         Invitation[]
+  links               Link[]
+  analyticsDays       LinkAnalyticsDaily[]
 }
 
 model Member {
@@ -99,14 +100,68 @@ model Invitation {
 }
 
 model Link {
-  id             String       @id @default(cuid())
-  organizationId String
-  slug           String       @default(cuid())
-  destinationUrl String
-  createdAt      DateTime     @default(now())
-  publishedAt    DateTime?
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  id                  String                 @id @default(cuid())
+  organizationId      String
+  slug                String                 @default(cuid())
+  destinationUrl      String
+  createdAt           DateTime               @default(now())
+  publishedAt         DateTime?
+  organization        Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  analyticsDays       LinkAnalyticsDaily[]
 
   @@unique([organizationId, slug])
+  @@unique([organizationId, id])
   @@index([organizationId, createdAt])
+}
+
+enum AnalyticsDimension {
+  COUNTRY
+  DEVICE
+  REFERRER
+}
+
+model LinkAnalyticsDaily {
+  organizationId String
+  linkId         String
+  day            DateTime                 @db.Date
+  clicks         Int                      @default(0)
+  uniqueVisitors Int                      @default(0)
+  createdAt      DateTime                 @default(now())
+  updatedAt      DateTime                 @updatedAt
+  organization   Organization              @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  link           Link                      @relation(fields: [organizationId, linkId], references: [organizationId, id], onDelete: Cascade)
+  dimensions     LinkAnalyticsDimensionDaily[]
+  visitors       LinkAnalyticsVisitor[]
+
+  @@id([organizationId, linkId, day])
+  @@index([organizationId, day])
+  @@index([day])
+}
+
+model LinkAnalyticsDimensionDaily {
+  organizationId String
+  linkId         String
+  day            DateTime           @db.Date
+  dimension      AnalyticsDimension
+  value          String             @db.VarChar(253)
+  clicks         Int                @default(0)
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+  daily          LinkAnalyticsDaily @relation(fields: [organizationId, linkId, day], references: [organizationId, linkId, day], onDelete: Cascade)
+
+  @@id([organizationId, linkId, day, dimension, value])
+  @@index([organizationId, dimension, day])
+}
+
+model LinkAnalyticsVisitor {
+  organizationId String
+  linkId         String
+  day            DateTime           @db.Date
+  visitorDigest  String             @db.Char(64)
+  expiresAt      DateTime
+  createdAt      DateTime           @default(now())
+  daily          LinkAnalyticsDaily @relation(fields: [organizationId, linkId, day], references: [organizationId, linkId, day], onDelete: Cascade)
+
+  @@id([organizationId, linkId, day, visitorDigest])
+  @@index([expiresAt])
 }

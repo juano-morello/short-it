@@ -15,6 +15,12 @@ direct client connection. Better Auth uses that header for its in-memory rate-li
 session persistence clears the IP and user-agent fields. A production proxy chain must either
 leave Caddy as the public edge or replace this rule with an equivalent trusted-header policy.
 
+For public redirects, Caddy separately overwrites `X-Shortit-Client-IP`. Analytics derives its
+ephemeral daily digest only from that header. Do not forward this header from an upstream client or
+use `X-Forwarded-For` as an analytics identity source. The launch country value is `Unknown`.
+Before production country enrichment, authenticate the edge that supplies a new country value and
+document the source separately.
+
 ## Logs, metrics, and traces
 
 The API must emit structured, privacy-safe logs with request IDs. It must not log raw IPs,
@@ -61,6 +67,12 @@ Public redirects have an independent ten-request DNS validation gate with a two-
 That gate protects outbound resolution but does not admit or rate-limit database lookups. An edge
 or WAF admission policy, or a shared redirect limiter, is required before public production traffic
 or multiple API instances.
+
+Redirect analytics use a separate PostgreSQL pool capped at two connections and an in-process
+20-capture gate. Capture runs only after a successful `GET` response ends; `HEAD` redirects do not
+count. Per link and UTC day, no more than 100 distinct referrer hosts are retained, with further
+hosts grouped as `other`. Schedule `pnpm --filter @short-it/api analytics:prune` before production
+to remove expired daily visitor digests and aggregates older than 12 months.
 
 ## Migrations and rollback
 

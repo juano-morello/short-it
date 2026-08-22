@@ -6,16 +6,37 @@ import { PublicRedirectController } from "./public-redirect.controller.js";
 
 describe("PublicRedirectController", () => {
   it("writes a bodyless uncached redirect without using request query parameters", async () => {
-    const service = { resolve: vi.fn(async () => "https://public.example/portfolio") };
+    const service = {
+      resolve: vi.fn(async () => ({
+        destinationUrl: "https://public.example/portfolio",
+        linkId: "link-1",
+        organizationId: "workspace-1",
+      })),
+    };
+    const analytics = { tryCapture: vi.fn() };
     const response = createResponse();
-    const controller = new PublicRedirectController(service as never);
+    const controller = new PublicRedirectController(service as never, analytics as never);
     const log = vi.spyOn(Logger.prototype, "log").mockImplementation(() => undefined);
 
     await controller.get(
       "cmf4fvwfl0000q47d6kh4wq9p",
       {
-        headers: { host: "studio.short.it", "x-request-id": "redirect-123" },
-        get: (name: string) => (name === "x-request-id" ? "redirect-123" : undefined),
+        headers: {
+          host: "studio.short.it",
+          referer: "https://source.example/path?private=value",
+          "user-agent": "Example browser",
+          "x-shortit-client-ip": "203.0.113.40",
+          "x-request-id": "redirect-123",
+        },
+        get: (name: string) => {
+          const value = {
+            referer: "https://source.example/path?private=value",
+            "user-agent": "Example browser",
+            "x-request-id": "redirect-123",
+            "x-shortit-client-ip": "203.0.113.40",
+          }[name.toLowerCase()];
+          return value;
+        },
         query: { campaign: "ignored" },
       } as unknown as Request,
       response as unknown as Response,
@@ -31,6 +52,17 @@ describe("PublicRedirectController", () => {
     expect(response.setHeader).toHaveBeenCalledWith("Location", "https://public.example/portfolio");
     expect(response.setHeader).toHaveBeenCalledWith("Referrer-Policy", "no-referrer");
     expect(response.end).toHaveBeenCalledWith();
+    expect(analytics.tryCapture).toHaveBeenCalledWith({
+      ipAddress: "203.0.113.40",
+      linkId: "link-1",
+      organizationId: "workspace-1",
+      referrer: "https://source.example/path?private=value",
+      requestId: "redirect-123",
+      userAgent: "Example browser",
+    });
+    expect(response.end.mock.invocationCallOrder[0]).toBeLessThan(
+      analytics.tryCapture.mock.invocationCallOrder[0],
+    );
     expect(log).toHaveBeenCalledWith(
       expect.stringMatching(/"event":"public_redirect".*"outcome":"redirected".*"status":302/),
     );
@@ -43,7 +75,10 @@ describe("PublicRedirectController", () => {
     );
     const service = { resolve: vi.fn(async () => Promise.reject(unavailable)) };
     const response = createResponse();
-    const controller = new PublicRedirectController(service as never);
+    const controller = new PublicRedirectController(
+      service as never,
+      { tryCapture: vi.fn() } as never,
+    );
 
     await expect(
       controller.get(
@@ -60,16 +95,22 @@ describe("PublicRedirectController", () => {
   it("returns retryable headers without a location when the redirect DNS pool is saturated", async () => {
     const settleResolutions: Array<(addresses: Array<{ address: string }>) => void> = [];
     const service = {
-      resolve: async ({ slug }: { slug: string }) =>
-        assertSafeRedirectDestinationUrl(
+      resolve: async ({ slug }: { slug: string }) => ({
+        destinationUrl: await assertSafeRedirectDestinationUrl(
           `https://${slug}.example`,
           async () =>
             new Promise<Array<{ address: string }>>((resolve) => {
               settleResolutions.push(resolve);
             }),
         ),
+        linkId: `link-${slug}`,
+        organizationId: "workspace-1",
+      }),
     };
-    const controller = new PublicRedirectController(service as never);
+    const controller = new PublicRedirectController(
+      service as never,
+      { tryCapture: vi.fn() } as never,
+    );
     const pendingRedirects = Array.from({ length: 10 }, (_, index) =>
       controller.get(
         cuidFor(index),
@@ -94,10 +135,59 @@ describe("PublicRedirectController", () => {
     }
     await Promise.all(pendingRedirects);
   });
+
+  it("does not count a HEAD redirect as a click", async () => {
+    const service = {
+      resolve: vi.fn(async () => ({
+        destinationUrl: "https://public.example/portfolio",
+        linkId: "link-1",
+        organizationId: "workspace-1",
+      })),
+    };
+    const analytics = { tryCapture: vi.fn() };
+    const controller = new PublicRedirectController(service as never, analytics as never);
+
+    await controller.head(
+      "cmf4fvwfl0000q47d6kh4wq9p",
+      requestForController(),
+      createResponse() as unknown as Response,
+    );
+
+    expect(analytics.tryCapture).not.toHaveBeenCalled();
+  });
+
+  it("keeps a completed redirect successful if analytics unexpectedly throws", async () => {
+    const service = {
+      resolve: vi.fn(async () => ({
+        destinationUrl: "https://public.example/portfolio",
+        linkId: "link-1",
+        organizationId: "workspace-1",
+      })),
+    };
+    const response = createResponse();
+    const controller = new PublicRedirectController(
+      service as never,
+      {
+        tryCapture: vi.fn(() => {
+          throw new Error("analytics unavailable");
+        }),
+      } as never,
+    );
+
+    await expect(
+      controller.get(slug(), requestForController(), response as unknown as Response),
+    ).resolves.toBeUndefined();
+    expect(response.status).toHaveBeenCalledWith(302);
+    expect(response.end).toHaveBeenCalledWith();
+  });
 });
 
 function cuidFor(index: number): string {
   return `c${index.toString().padStart(24, "0")}`;
+}
+
+function slug(): string {
+  return cuidFor(0);
 }
 
 function requestForController(): Request {

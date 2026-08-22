@@ -23,16 +23,21 @@ redirect when analytics storage, enrichment, or capacity is unavailable.
 
 - Add a Prisma migration for per-link daily totals, daily unique-visitor state, and aggregate
   country, device-category, and referrer-host dimensions.
-- Derive a keyed daily visitor digest from an edge-normalized IP only in memory. Store the digest
-  with an expiry of less than 24 hours; do not persist the source IP.
+- Derive a keyed daily visitor digest from the dedicated client-IP header that Caddy overwrites on
+  public-link traffic. Store the digest until the next UTC midnight, for no more than 24 hours;
+  never persist the source IP.
 - Derive a coarse device category from the request user-agent in memory. Normalize an HTTP(S)
   referrer to its hostname only; do not persist a raw referrer URL.
-- Record `Unknown` country in local development. Production may accept country only from a
-  trusted edge-normalized source after the edge authenticates that source.
+- Record `Unknown` country in every launch environment. A later production-only change may accept
+  country from a trusted edge source after that source is authenticated; browser headers are not
+  a country source.
 - Run capture after the redirect response is committed. A separate in-process gate permits at most
-  20 concurrent captures and drops excess telemetry with a privacy-safe outcome log.
+  20 concurrent captures and drops excess telemetry with a privacy-safe outcome log. Analytics
+  uses a separate PostgreSQL pool limited to two connections.
+- Retain at most 100 distinct referrer hosts per link and UTC day; additional new hosts aggregate
+  under `other`. Only successful `GET` redirects are captured; `HEAD` redirects are excluded.
 - Add an authenticated organization-scoped analytics overview for owner, editor, and analyst
-  members. The dashboard shows available link totals and daily trends without separate link CRUD.
+  members. The dashboard labels the workspace total as daily unique link visitors.
 - Add an idempotent aggregate and visitor-state pruning command. Production scheduling remains a
   deployment prerequisite.
 
@@ -68,26 +73,27 @@ overview and renders totals and daily trends for the current workspace.
 
 ## Consequential decisions
 
-Juano approved a new Prisma migration, a dedicated `ANALYTICS_VISITOR_SECRET`, an in-process
-20-concurrent-capture limit that drops telemetry under pressure, and 12-month aggregate retention.
-Development does not perform live GeoIP lookup and records `Unknown`; tests inject deterministic
-country classification. Production country classification requires a trusted edge source and does
-not trust browser headers.
+Juano approved a new Prisma migration, a dedicated `ANALYTICS_VISITOR_SECRET`, a separate
+two-connection analytics pool, an in-process 20-concurrent-capture limit that drops telemetry
+under pressure, a 100-host per-link daily referrer cap, and 12-month aggregate retention. Launch
+records `Unknown` country in all environments. A future production country source must be supplied
+by an authenticated edge and must not trust browser headers.
 
 ## Risks and dependencies
 
 Analytics are intentionally approximate during persistence failures or saturation. A process-local
 capture gate does not coordinate across API instances, so a shared limiter or queue is required
-before multi-instance production. The prune command must be scheduled by the future deployment.
+before multi-instance production. Production must keep Caddy, or an equivalent authenticated edge,
+as the sole source of the dedicated public client-IP header and must schedule the prune command.
 The visitor secret is required in production and must remain independent from authentication
 secrets. No new dependency is proposed.
 
 ## TDD and BDD strategy
 
 Begin with a public redirect scenario that remains a `302` when capture fails. Add focused policy
-tests for digest lifecycle, device and referrer normalization, trusted country classification, and
-capture saturation. Add PostgreSQL integration tests for scoped aggregation, deduplication, and
-pruning. Add browser coverage for the analytics overview and analyst read access.
+tests for digest lifecycle, device and referrer normalization, referrer capping, and capture
+saturation. Add PostgreSQL integration tests for scoped aggregation and deduplication. Add browser
+coverage for the analytics overview and analyst read access.
 
 ## Verification plan
 

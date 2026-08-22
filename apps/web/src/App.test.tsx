@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App.js";
+import { analyticsGateway } from "./analytics-gateway.js";
 import { linkGateway } from "./link-gateway.js";
 import { workspaceGateway } from "./workspace-gateway.js";
 
@@ -21,10 +22,19 @@ vi.mock("./link-gateway.js", () => ({
   },
 }));
 
+vi.mock("./analytics-gateway.js", () => ({
+  analyticsGateway: {
+    getOverview: vi.fn(),
+  },
+}));
+
 describe("App", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(workspaceGateway.getSession).mockResolvedValue({ data: null } as never);
+    vi.mocked(analyticsGateway.getOverview).mockResolvedValue({
+      data: { breakdowns: { countries: [], devices: [], referrers: [] }, daily: [] },
+    });
   });
 
   afterEach(cleanup);
@@ -314,6 +324,37 @@ describe("App", () => {
 
     expect(await screen.findByText(/cannot publish links/i)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Publish link" })).not.toBeInTheDocument();
+  });
+
+  it("shows workspace-scoped aggregate analytics to an analyst", async () => {
+    vi.mocked(workspaceGateway.getSession).mockResolvedValue({
+      data: { user: { id: "member-1" } },
+    } as never);
+    vi.mocked(workspaceGateway.listWorkspaces).mockResolvedValue({
+      data: [{ id: "workspace-1", name: "Ada Studio", slug: "ada" }],
+    } as never);
+    vi.mocked(workspaceGateway.getWorkspace).mockResolvedValue({
+      data: { members: [{ role: "analyst", userId: "member-1" }] },
+    } as never);
+    vi.mocked(analyticsGateway.getOverview).mockResolvedValue({
+      data: {
+        breakdowns: {
+          countries: [{ clicks: 2, value: "Unknown" }],
+          devices: [{ clicks: 2, value: "desktop" }],
+          referrers: [{ clicks: 2, value: "direct" }],
+        },
+        daily: [{ clicks: 2, dailyUniqueLinkVisitors: 1, date: "2026-08-22" }],
+      },
+    });
+
+    render(<App />);
+
+    expect(
+      await screen.findByRole("heading", { name: "Redirect performance" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("DAILY UNIQUE LINK VISITORS")).toBeInTheDocument();
+    expect(screen.getByText("Unknown")).toBeInTheDocument();
+    expect(analyticsGateway.getOverview).toHaveBeenCalledWith("workspace-1");
   });
 });
 

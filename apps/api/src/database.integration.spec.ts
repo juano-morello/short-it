@@ -3,7 +3,9 @@ import { ConflictException, ForbiddenException, NotFoundException } from "@nestj
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from "@testcontainers/postgresql";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { AnalyticsCaptureService } from "./analytics/analytics-capture.service.js";
+import { pruneAnalytics } from "./analytics/analytics-retention.js";
 import { LinksService } from "./links/links.service.js";
 import { PublicRedirectService } from "./redirect/public-redirect.service.js";
 
@@ -205,7 +207,11 @@ describe("PostgreSQL integration", () => {
 
     await expect(
       service.resolve({ host: "redirect-workspace.short.it", slug: link.slug }),
-    ).resolves.toBe("https://public.example/portfolio");
+    ).resolves.toEqual({
+      destinationUrl: "https://public.example/portfolio",
+      linkId: link.id,
+      organizationId: "redirect-workspace",
+    });
     await expect(
       service.resolve({ host: "other-workspace.short.it", slug: link.slug }),
     ).rejects.toEqual(new NotFoundException());
@@ -214,5 +220,222 @@ describe("PostgreSQL integration", () => {
     await expect(
       service.resolve({ host: "redirect-workspace.short.it", slug: link.slug }),
     ).rejects.toEqual(new NotFoundException());
+  });
+
+  it("persists only daily aggregates and expiring visitor digests for redirect analytics", async () => {
+    await testPrisma.organization.create({
+      data: { id: "analytics-workspace", name: "Analytics Workspace", slug: "analytics-workspace" },
+    });
+    const link = await testPrisma.link.create({
+      data: {
+        destinationUrl: "https://public.example/analytics",
+        organizationId: "analytics-workspace",
+        publishedAt: new Date(),
+      },
+    });
+    const capture = AnalyticsCaptureService.forTesting({
+      database: testPrisma as never,
+      now: () => new Date("2026-08-22T10:00:00.000Z"),
+      visitorSecret: "analytics-secret-for-integration-tests-only",
+    });
+
+    for (const input of [
+      {
+        ipAddress: "203.0.113.40",
+        referrer: "https://source.example/path",
+        userAgent: "Mozilla/5.0 (iPhone)",
+      },
+      {
+        ipAddress: "203.0.113.40",
+        referrer: "https://source.example/other",
+        userAgent: "Mozilla/5.0 (X11)",
+      },
+      { ipAddress: "203.0.113.41", referrer: undefined, userAgent: undefined },
+    ]) {
+      expect(
+        capture.tryCapture({
+          ...input,
+          linkId: link.id,
+          organizationId: "analytics-workspace",
+          requestId: "analytics-test-request",
+        }),
+      ).toBe(true);
+    }
+
+    await vi.waitFor(async () => {
+      await expect(
+        testPrisma.linkAnalyticsDaily.findUniqueOrThrow({
+          where: {
+            organizationId_linkId_day: {
+              day: new Date("2026-08-22T00:00:00.000Z"),
+              linkId: link.id,
+              organizationId: "analytics-workspace",
+            },
+          },
+        }),
+      ).resolves.toMatchObject({ clicks: 3, uniqueVisitors: 2 });
+    });
+
+    await expect(
+      testPrisma.linkAnalyticsDimensionDaily.findMany({
+        where: { linkId: link.id, organizationId: "analytics-workspace" },
+        orderBy: [{ dimension: "asc" }, { value: "asc" }],
+        select: { clicks: true, dimension: true, value: true },
+      }),
+    ).resolves.toEqual([
+      { clicks: 3, dimension: "COUNTRY", value: "Unknown" },
+      { clicks: 1, dimension: "DEVICE", value: "desktop" },
+      { clicks: 1, dimension: "DEVICE", value: "mobile" },
+      { clicks: 1, dimension: "DEVICE", value: "unknown" },
+      { clicks: 1, dimension: "REFERRER", value: "direct" },
+      { clicks: 2, dimension: "REFERRER", value: "source.example" },
+    ]);
+    const visitors = await testPrisma.linkAnalyticsVisitor.findMany({
+      where: { linkId: link.id, organizationId: "analytics-workspace" },
+      select: { expiresAt: true, visitorDigest: true },
+    });
+    expect(visitors).toHaveLength(2);
+    expect(JSON.stringify(visitors)).not.toContain("203.0.113.40");
+    expect(JSON.stringify(visitors)).not.toContain("Mozilla");
+    expect(visitors).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ expiresAt: new Date("2026-08-23T00:00:00.000Z") }),
+      ]),
+    );
+  });
+
+  it("caps new referrer hosts at 100 per link per UTC day", async () => {
+    await testPrisma.organization.create({
+      data: { id: "referrer-workspace", name: "Referrer Workspace", slug: "referrer-workspace" },
+    });
+    const link = await testPrisma.link.create({
+      data: {
+        destinationUrl: "https://public.example/referrers",
+        organizationId: "referrer-workspace",
+        publishedAt: new Date(),
+      },
+    });
+    const day = new Date("2026-08-22T00:00:00.000Z");
+    await testPrisma.linkAnalyticsDaily.create({
+      data: { clicks: 100, day, linkId: link.id, organizationId: "referrer-workspace" },
+    });
+    await testPrisma.linkAnalyticsDimensionDaily.createMany({
+      data: Array.from({ length: 100 }, (_, index) => ({
+        clicks: 1,
+        day,
+        dimension: "REFERRER" as const,
+        linkId: link.id,
+        organizationId: "referrer-workspace",
+        value: `source-${index}.example`,
+      })),
+    });
+    const capture = AnalyticsCaptureService.forTesting({
+      database: testPrisma as never,
+      now: () => new Date("2026-08-22T11:00:00.000Z"),
+      visitorSecret: "analytics-secret-for-integration-tests-only",
+    });
+
+    expect(
+      capture.tryCapture({
+        ipAddress: "203.0.113.50",
+        linkId: link.id,
+        organizationId: "referrer-workspace",
+        referrer: "https://source-101.example/path",
+        requestId: "referrer-cap-request",
+        userAgent: "Mozilla/5.0",
+      }),
+    ).toBe(true);
+
+    await vi.waitFor(async () => {
+      await expect(
+        testPrisma.linkAnalyticsDimensionDaily.findUnique({
+          where: {
+            organizationId_linkId_day_dimension_value: {
+              day,
+              dimension: "REFERRER",
+              linkId: link.id,
+              organizationId: "referrer-workspace",
+              value: "other",
+            },
+          },
+        }),
+      ).resolves.toMatchObject({ clicks: 1 });
+    });
+    await expect(
+      testPrisma.linkAnalyticsDimensionDaily.findUnique({
+        where: {
+          organizationId_linkId_day_dimension_value: {
+            day,
+            dimension: "REFERRER",
+            linkId: link.id,
+            organizationId: "referrer-workspace",
+            value: "source-101.example",
+          },
+        },
+      }),
+    ).resolves.toBeNull();
+  });
+
+  it("prunes expired visitor state and aggregate days older than twelve months idempotently", async () => {
+    await testPrisma.organization.create({
+      data: {
+        id: "retention-workspace",
+        name: "Retention Workspace",
+        slug: "retention-workspace",
+      },
+    });
+    const link = await testPrisma.link.create({
+      data: {
+        destinationUrl: "https://public.example/retention",
+        organizationId: "retention-workspace",
+        publishedAt: new Date(),
+      },
+    });
+    const oldDay = new Date("2025-08-21T00:00:00.000Z");
+    const retainedDay = new Date("2025-08-22T00:00:00.000Z");
+    await testPrisma.linkAnalyticsDaily.createMany({
+      data: [
+        { day: oldDay, linkId: link.id, organizationId: "retention-workspace" },
+        { day: retainedDay, linkId: link.id, organizationId: "retention-workspace" },
+      ],
+    });
+    await testPrisma.linkAnalyticsVisitor.create({
+      data: {
+        day: oldDay,
+        expiresAt: new Date("2025-08-22T00:00:00.000Z"),
+        linkId: link.id,
+        organizationId: "retention-workspace",
+        visitorDigest: "a".repeat(64),
+      },
+    });
+
+    await expect(
+      pruneAnalytics(testPrisma as never, new Date("2026-08-22T10:00:00.000Z")),
+    ).resolves.toEqual({ expiredAggregates: 1, expiredVisitors: 1 });
+    await expect(
+      testPrisma.linkAnalyticsDaily.findUnique({
+        where: {
+          organizationId_linkId_day: {
+            day: oldDay,
+            linkId: link.id,
+            organizationId: "retention-workspace",
+          },
+        },
+      }),
+    ).resolves.toBeNull();
+    await expect(
+      testPrisma.linkAnalyticsDaily.findUnique({
+        where: {
+          organizationId_linkId_day: {
+            day: retainedDay,
+            linkId: link.id,
+            organizationId: "retention-workspace",
+          },
+        },
+      }),
+    ).resolves.toBeTruthy();
+    await expect(
+      pruneAnalytics(testPrisma as never, new Date("2026-08-22T10:00:00.000Z")),
+    ).resolves.toEqual({ expiredAggregates: 0, expiredVisitors: 0 });
   });
 });
