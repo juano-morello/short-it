@@ -171,9 +171,8 @@ async function createWorkspaceOwner(): Promise<WorkspaceMember> {
   const suffix = randomUUID().replaceAll("-", "").slice(0, 12);
   const email = `link-owner-${suffix}@example.test`;
   const owner = await createSignedInUser(email, "Link Owner");
-  const workspaceResponse = await fetch(`${baseUrl}/api/auth/organization/create`, {
+  const workspaceResponse = await fetch(`${baseUrl}/api/workspaces`, {
     body: JSON.stringify({
-      keepCurrentActiveOrganization: true,
       name: "Link Workspace",
       slug: `links-${suffix}`,
     }),

@@ -345,9 +345,8 @@ Then("the invitation record is deleted", async () => {
 async function createWorkspaceOwner(): Promise<WorkspaceOwner> {
   const signedIn = await createSignedInUser("owner");
   const suffix = randomUUID().replaceAll("-", "").slice(0, 12);
-  const response = await fetch(`${baseUrl}/api/auth/organization/create`, {
+  const response = await fetch(`${baseUrl}/api/workspaces`, {
     body: JSON.stringify({
-      keepCurrentActiveOrganization: true,
       name: "Invitation Workspace",
       slug: `invites-${suffix}`,
     }),

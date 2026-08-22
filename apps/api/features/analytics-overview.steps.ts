@@ -41,9 +41,8 @@ Given("a signed-in analyst has workspace analytics", async () => {
     .getSetCookie()
     .map((value) => value.split(";", 1)[0])
     .join("; ");
-  const workspaceResponse = await fetch(`${baseUrl}/api/auth/organization/create`, {
+  const workspaceResponse = await fetch(`${baseUrl}/api/workspaces`, {
     body: JSON.stringify({
-      keepCurrentActiveOrganization: true,
       name: "Analytics Workspace",
       slug: `analytics-${suffix}`,
     }),

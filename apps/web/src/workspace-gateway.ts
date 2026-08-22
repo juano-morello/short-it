@@ -1,5 +1,7 @@
 import { authClient } from "./auth-client.js";
 
+type CreatedWorkspace = { id: string; name: string; slug: string };
+
 export const workspaceGateway = {
   acceptInvitation: async (invitationId: string) => {
     try {
@@ -22,8 +24,22 @@ export const workspaceGateway = {
       return { error: { message: "Invitation cannot be cancelled." } };
     }
   },
-  createWorkspace: (input: { name: string; slug: string }) =>
-    authClient.organization.create({ keepCurrentActiveOrganization: true, ...input }),
+  createWorkspace: async (input: { name: string; slug: string }) => {
+    try {
+      const response = await fetch("/api/workspaces", {
+        body: JSON.stringify(input),
+        credentials: "same-origin",
+        headers: { "content-type": "application/json" },
+        method: "POST",
+      });
+      const body = (await response.json()) as CreatedWorkspace & { message?: string };
+      return response.ok
+        ? { data: { id: body.id, name: body.name, slug: body.slug } }
+        : { error: { message: body.message } };
+    } catch {
+      return { error: { message: "Workspace cannot be created." } };
+    }
+  },
   deleteAccount: async (confirmationEmail: string) => {
     try {
       const response = await fetch("/api/account", {

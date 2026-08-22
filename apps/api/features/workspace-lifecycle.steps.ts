@@ -15,7 +15,9 @@ type Workspace = { id: string; slug: string };
 let accountDeletionResponse: Response | undefined;
 let accountUser: SignedInUser | undefined;
 let lifecycleWorkspace: Workspace | undefined;
+let nativeWorkspaceCreationResponse: Response | undefined;
 let otherWorkspace: Workspace | undefined;
+let concurrentWorkspaceCreationResponse: Response | undefined;
 let workspaceDeletionResponse: Response | undefined;
 
 Given("a signed-in workspace owner with a published link", async () => {
@@ -197,6 +199,10 @@ Given("a signed-in user without an owned workspace", async () => {
   });
 });
 
+Given("a signed-in user without a workspace", async () => {
+  accountUser = await createSignedInUser("workspace-race");
+});
+
 When("the user requests account deletion with their email confirmation", async () => {
   assert.ok(accountUser, "A signed-in user is required.");
   accountDeletionResponse = await requestAccountDeletion(accountUser);
@@ -212,6 +218,67 @@ Then("the account, credentials, session, and memberships no longer exist", async
   assert.equal(await prisma.member.count({ where: { userId: accountUser.id } }), 0);
   const subsequentRequest = await requestAccountDeletion(accountUser);
   assert.equal(subsequentRequest.status, 401);
+});
+
+When("the user concurrently creates a workspace and deletes their account", async () => {
+  assert.ok(accountUser, "A signed-in user is required.");
+  const slug = `race-${randomUUID().replaceAll("-", "").slice(0, 12)}`;
+  [concurrentWorkspaceCreationResponse, accountDeletionResponse] = await Promise.all([
+    fetch(`${baseUrl}/api/workspaces`, {
+      body: JSON.stringify({ name: "Concurrent Workspace", slug }),
+      headers: requestHeaders(accountUser),
+      method: "POST",
+    }),
+    requestAccountDeletion(accountUser),
+  ]);
+  lifecycleWorkspace = { id: slug, slug };
+});
+
+Then("exactly one lifecycle operation succeeds without an ownerless workspace", async () => {
+  assert.ok(accountUser, "A signed-in user is required.");
+  assert.ok(concurrentWorkspaceCreationResponse, "A workspace response is required.");
+  assert.ok(accountDeletionResponse, "An account deletion response is required.");
+  assert.ok(lifecycleWorkspace, "A workspace handle is required.");
+
+  const workspaceCreated = concurrentWorkspaceCreationResponse.status === 200;
+  const accountDeleted = accountDeletionResponse.status === 204;
+  assert.notEqual(workspaceCreated, accountDeleted);
+
+  const workspace = await prisma.organization.findUnique({
+    where: { slug: lifecycleWorkspace.slug },
+  });
+  if (workspaceCreated) {
+    assert.equal(accountDeletionResponse.status, 409);
+    assert.ok(workspace);
+    assert.equal(
+      await prisma.member.count({
+        where: {
+          organizationId: workspace.id,
+          role: { contains: "owner" },
+          userId: accountUser.id,
+        },
+      }),
+      1,
+    );
+  } else {
+    assert.equal(concurrentWorkspaceCreationResponse.status, 401);
+    assert.equal(workspace, null);
+    assert.equal(await prisma.user.findUnique({ where: { id: accountUser.id } }), null);
+  }
+});
+
+When("the user calls the native workspace creation route", async () => {
+  assert.ok(accountUser, "A signed-in user is required.");
+  nativeWorkspaceCreationResponse = await fetch(`${baseUrl}/api/auth/organization/create`, {
+    body: JSON.stringify({ name: "Blocked Workspace", slug: "blocked-workspace" }),
+    headers: requestHeaders(accountUser),
+    method: "POST",
+  });
+});
+
+Then("native workspace creation is rejected", async () => {
+  assert.ok(nativeWorkspaceCreationResponse, "A native workspace response is required.");
+  assert.equal(nativeWorkspaceCreationResponse.status, 404);
 });
 
 async function createSignedInUser(prefix: string): Promise<SignedInUser> {
@@ -244,9 +311,8 @@ async function createSignedInUser(prefix: string): Promise<SignedInUser> {
 
 async function createWorkspace(user: SignedInUser, prefix: string): Promise<Workspace> {
   const slug = `${prefix}-${randomUUID().replaceAll("-", "").slice(0, 12)}`;
-  const response = await fetch(`${baseUrl}/api/auth/organization/create`, {
+  const response = await fetch(`${baseUrl}/api/workspaces`, {
     body: JSON.stringify({
-      keepCurrentActiveOrganization: true,
       name: "Lifecycle Workspace",
       slug,
     }),

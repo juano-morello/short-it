@@ -29,6 +29,14 @@ email addresses, workspace handles, record IDs, cookies, IP addresses, and user 
 production enables deletion, configure a dashboard and alert for deletion failures and an unusual
 rejection rate, retaining these operational logs under the environment's approved log policy.
 
+Workspace creation and account deletion use separate serializable transactions with the same lifecycle
+policy. On a PostgreSQL serialization or positively identified transaction-timeout conflict, each
+retries no more than three times with bounded jitter. The `workspace_lifecycle_transaction` event
+records only request ID, outcome, and attempt count. A `temporarily_unavailable` outcome corresponds
+to a retryable `503`. Before production, chart retrying and temporarily unavailable outcomes, and
+investigate five temporarily unavailable outcomes in five minutes with database saturation and
+lock-wait telemetry. No personal, workspace, or network identifiers belong in this event.
+
 The API must emit structured, privacy-safe logs with request IDs. It must not log raw IPs,
 raw user agents, session tokens, invitation URLs, or destination query strings. Product
 metrics include redirect success and failure and analytics-write failures. Link publication logs a
@@ -57,8 +65,8 @@ and are deferred.
 ## Alerts and dashboards
 
 Before production, alert on readiness failures, redirect error ratio, analytics write failure
-ratio, and database connection saturation. These alerts and dashboards require provider
-selection and are deferred.
+ratio, lifecycle transaction unavailability, and database connection saturation. These alerts and
+dashboards require provider selection and are deferred.
 
 ## Capacity and cost
 
@@ -68,6 +76,9 @@ member/workspace window and quota check/write coordination in process; its publi
 durable PostgreSQL state. The service serializes quota checks and writes for each workspace, but
 that coordination applies only to one API process. Shared limiter and quota coordination must be
 in place before running more than one API instance.
+
+Workspace creation also allows at most 100 authenticated attempts per user in one minute within a
+single API process. A shared limiter is required before more than one API instance is used.
 
 Public redirects have an independent ten-request DNS validation gate with a two-second timeout.
 That gate protects outbound resolution but does not admit or rate-limit database lookups. An edge

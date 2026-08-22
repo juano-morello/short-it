@@ -6,7 +6,12 @@ describe("AccountDeletionService", () => {
   it("deletes only the authenticated user after matching their email and finding no ownership", async () => {
     const member = { findMany: vi.fn().mockResolvedValue([{ role: "editor" }]) };
     const user = { delete: vi.fn().mockResolvedValue({}) };
-    const service = AccountDeletionService.forTesting({ database: { member, user } as never });
+    const service = AccountDeletionService.forTesting({
+      database: {
+        $transaction: (operation: (transaction: never) => Promise<unknown>) =>
+          operation({ member, user } as never),
+      } as never,
+    });
 
     await expect(
       service.delete({
@@ -26,7 +31,12 @@ describe("AccountDeletionService", () => {
   it("rejects a mismatched email confirmation before querying the database", async () => {
     const member = { findMany: vi.fn() };
     const user = { delete: vi.fn() };
-    const service = AccountDeletionService.forTesting({ database: { member, user } as never });
+    const service = AccountDeletionService.forTesting({
+      database: {
+        $transaction: (operation: (transaction: never) => Promise<unknown>) =>
+          operation({ member, user } as never),
+      } as never,
+    });
 
     await expect(
       service.delete({
@@ -45,7 +55,12 @@ describe("AccountDeletionService", () => {
     async (role) => {
       const member = { findMany: vi.fn().mockResolvedValue([{ role }]) };
       const user = { delete: vi.fn() };
-      const service = AccountDeletionService.forTesting({ database: { member, user } as never });
+      const service = AccountDeletionService.forTesting({
+        database: {
+          $transaction: (operation: (transaction: never) => Promise<unknown>) =>
+            operation({ member, user } as never),
+        } as never,
+      });
 
       await expect(
         service.delete({

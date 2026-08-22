@@ -1,43 +1,46 @@
 import {
   Body,
   Controller,
-  Delete,
   ForbiddenException,
   HttpCode,
-  HttpStatus,
   Inject,
+  Post,
   Req,
   UnauthorizedException,
 } from "@nestjs/common";
 import type { Request } from "express";
 import { getConfig } from "../config.js";
 import { getRequestId } from "../request-id.js";
-import { AccountDeletionService } from "./account-deletion.service.js";
 import { auth } from "./auth.js";
+import { WorkspaceCreationRateLimiter } from "./workspace-creation-rate-limiter.js";
+import { WorkspaceLifecycleService } from "./workspace-lifecycle.service.js";
 
-type AccountDeletionBody = { confirmationEmail?: unknown };
+type WorkspaceCreationBody = { name?: unknown; slug?: unknown };
 
-@Controller("api/account")
-export class AccountDeletionController {
+@Controller("api/workspaces")
+export class WorkspaceLifecycleController {
   constructor(
-    @Inject(AccountDeletionService)
-    private readonly accountDeletionService: AccountDeletionService,
+    @Inject(WorkspaceLifecycleService)
+    private readonly workspaceLifecycleService: WorkspaceLifecycleService,
+    @Inject(WorkspaceCreationRateLimiter)
+    private readonly workspaceCreationRateLimiter: WorkspaceCreationRateLimiter,
   ) {}
 
-  @Delete()
-  @HttpCode(HttpStatus.NO_CONTENT)
-  async deleteAccount(
-    @Body() body: AccountDeletionBody | null | undefined,
+  @Post()
+  @HttpCode(200)
+  async createWorkspace(
+    @Body() body: WorkspaceCreationBody | null | undefined,
     @Req() request: Request,
   ) {
     assertTrustedOrigin(request);
     const session = await auth.api.getSession({ headers: toHeaders(request.headers) });
     if (!session) throw new UnauthorizedException();
+    this.workspaceCreationRateLimiter.take(session.user.id);
 
-    await this.accountDeletionService.delete({
-      confirmationEmail: body?.confirmationEmail,
-      email: session.user.email,
+    return this.workspaceLifecycleService.create({
+      name: body?.name,
       requestId: getRequestId(request),
+      slug: body?.slug,
       userId: session.user.id,
     });
   }
@@ -46,7 +49,7 @@ export class AccountDeletionController {
 function assertTrustedOrigin(request: Request): void {
   const origin = request.get("origin");
   if (!origin || !getConfig().origins.includes(origin)) {
-    throw new ForbiddenException("Account deletion must originate from the dashboard.");
+    throw new ForbiddenException("Workspace creation must originate from the dashboard.");
   }
 }
 
