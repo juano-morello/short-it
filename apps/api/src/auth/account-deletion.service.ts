@@ -3,20 +3,23 @@ import { prisma } from "../database.js";
 import { runWorkspaceLifecycleTransaction } from "./workspace-lifecycle-transaction.js";
 
 type AccountDeletionDatabase = Pick<typeof prisma, "$transaction">;
+type AccountDeletionDependencies = {
+  afterRead?: () => Promise<void>;
+  database: AccountDeletionDatabase;
+};
 
 type AccountDeletionInput = {
   confirmationEmail: unknown;
   email: string;
+  requestId?: string;
   userId: string;
 };
 
 @Injectable()
 export class AccountDeletionService {
-  private dependencies: { database: AccountDeletionDatabase } = { database: prisma };
+  private dependencies: AccountDeletionDependencies = { database: prisma };
 
-  static forTesting(
-    overrides: Partial<{ database: AccountDeletionDatabase }>,
-  ): AccountDeletionService {
+  static forTesting(overrides: Partial<AccountDeletionDependencies>): AccountDeletionService {
     const service = new AccountDeletionService();
     service.dependencies = { ...service.dependencies, ...overrides };
     return service;
@@ -27,19 +30,24 @@ export class AccountDeletionService {
       throw new BadRequestException("Enter your account email to confirm deletion.");
     }
 
-    await runWorkspaceLifecycleTransaction(this.dependencies.database, async (transaction) => {
-      const memberships = await transaction.member.findMany({
-        select: { role: true },
-        where: { userId: input.userId },
-      });
-      if (memberships.some((membership) => hasOwnerRole(membership.role))) {
-        throw new ConflictException(
-          "Delete or transfer every workspace you own before deleting your account.",
-        );
-      }
+    await runWorkspaceLifecycleTransaction(
+      this.dependencies.database,
+      async (transaction) => {
+        const memberships = await transaction.member.findMany({
+          select: { role: true },
+          where: { userId: input.userId },
+        });
+        if (memberships.some((membership) => hasOwnerRole(membership.role))) {
+          throw new ConflictException(
+            "Delete or transfer every workspace you own before deleting your account.",
+          );
+        }
+        await this.dependencies.afterRead?.();
 
-      await transaction.user.delete({ where: { id: input.userId } });
-    });
+        await transaction.user.delete({ where: { id: input.userId } });
+      },
+      { requestId: input.requestId },
+    );
   }
 }
 

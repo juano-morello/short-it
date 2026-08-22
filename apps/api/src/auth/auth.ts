@@ -160,7 +160,6 @@ export const auth = betterAuth({
       dynamicAccessControl: {
         enabled: false,
       },
-      organizationLimit: 3,
       membershipLimit: 25,
       invitationLimit: 10,
       invitationExpiresIn: 60 * 60 * 24 * 7,
@@ -175,10 +174,6 @@ export const auth = betterAuth({
         },
         beforeCreateInvitation: async ({ invitation }) => {
           assertInvitationRole(invitation.role);
-        },
-        beforeCreateOrganization: async ({ organization: workspace }) => {
-          assertDisplayName(workspace.name, "Workspace");
-          assertWorkspaceHandle(workspace.slug);
         },
         beforeUpdateOrganization: async ({ organization: workspace }) => {
           if (typeof workspace.name === "string") {

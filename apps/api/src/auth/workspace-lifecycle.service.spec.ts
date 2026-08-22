@@ -24,7 +24,6 @@ describe("WorkspaceLifecycleService", () => {
       service.create({ name: "Ada Studio", slug: "ada", userId: "user-1" }),
     ).resolves.toEqual({
       id: "workspace-1",
-      members: [{ id: "member-1", role: "owner", userId: "user-1" }],
       name: "Ada Studio",
       slug: "ada",
     });

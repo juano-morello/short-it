@@ -11,7 +11,9 @@ authenticated workspace reporting, and aggregate retention. WORK-006 covers owne
 creation, matching-email acceptance with confirmation, role scope, atomic cancellation, and retention.
 WORK-007 covers owner-only workspace deletion, account-deletion ownership checks, typed
 confirmation, cascade behavior, native-create rejection, and the concurrent workspace-create and
-account-delete lifecycle boundary.
+account-delete lifecycle boundary. Unit coverage exercises bounded lifecycle retry and retryable
+exhaustion behavior. The live lifecycle scenarios require the losing create request to return its
+session-derived `401`, not an internal error.
 
 ## Outside-in TDD workflow
 

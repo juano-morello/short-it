@@ -12,48 +12,67 @@ import { getWorkspaceHandleError } from "./workspace-handle.js";
 import { runWorkspaceLifecycleTransaction } from "./workspace-lifecycle-transaction.js";
 
 type WorkspaceLifecycleDatabase = Pick<typeof prisma, "$transaction">;
+type WorkspaceLifecycleTestingOverrides = Partial<{
+  afterRead: () => Promise<void>;
+  database: WorkspaceLifecycleDatabase;
+}>;
+export const maximumWorkspacesPerUser = 3;
+type CreatedWorkspace = { id: string; name: string; slug: string };
 
 @Injectable()
 export class WorkspaceLifecycleService {
+  private afterRead: (() => Promise<void>) | undefined;
   private database: WorkspaceLifecycleDatabase = prisma;
 
-  static forTesting(overrides: Partial<{ database: WorkspaceLifecycleDatabase }>) {
+  static forTesting(overrides: WorkspaceLifecycleTestingOverrides) {
     const service = new WorkspaceLifecycleService();
     Object.assign(service, overrides);
     return service;
   }
 
-  async create(input: { name: unknown; slug: unknown; userId: string }) {
+  async create(input: {
+    name: unknown;
+    requestId?: string;
+    slug: unknown;
+    userId: string;
+  }): Promise<CreatedWorkspace> {
     const name = assertWorkspaceName(input.name);
     const slug = assertWorkspaceHandle(input.slug);
 
     try {
-      return await runWorkspaceLifecycleTransaction(this.database, async (transaction) => {
-        const user = await transaction.user.findUnique({
-          select: { id: true },
-          where: { id: input.userId },
-        });
-        if (!user) throw new UnauthorizedException();
+      return await runWorkspaceLifecycleTransaction(
+        this.database,
+        async (transaction) => {
+          const user = await transaction.user.findUnique({
+            select: { id: true },
+            where: { id: input.userId },
+          });
+          if (!user) throw new UnauthorizedException();
 
-        const workspaceCount = await transaction.member.count({ where: { userId: input.userId } });
-        if (workspaceCount >= 3) {
-          throw new ConflictException("You have reached the maximum number of workspaces.");
-        }
+          const workspaceCount = await transaction.member.count({
+            where: { userId: input.userId },
+          });
+          if (workspaceCount >= maximumWorkspacesPerUser) {
+            throw new ConflictException("You have reached the maximum number of workspaces.");
+          }
+          await this.afterRead?.();
 
-        const organization = await transaction.organization.create({
-          data: { id: randomUUID(), name, slug },
-        });
-        const member = await transaction.member.create({
-          data: {
-            id: randomUUID(),
-            organizationId: organization.id,
-            role: "owner",
-            userId: input.userId,
-          },
-        });
+          const organization = await transaction.organization.create({
+            data: { id: randomUUID(), name, slug },
+          });
+          await transaction.member.create({
+            data: {
+              id: randomUUID(),
+              organizationId: organization.id,
+              role: "owner",
+              userId: input.userId,
+            },
+          });
 
-        return { ...organization, members: [member] };
-      });
+          return { id: organization.id, name: organization.name, slug: organization.slug };
+        },
+        { requestId: input.requestId },
+      );
     } catch (error) {
       if (isOrganizationSlugConflict(error)) {
         throw new BadRequestException("Organization already exists");

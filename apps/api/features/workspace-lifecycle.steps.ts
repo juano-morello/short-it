@@ -261,7 +261,7 @@ Then("exactly one lifecycle operation succeeds without an ownerless workspace", 
       1,
     );
   } else {
-    assert.ok(concurrentWorkspaceCreationResponse.status >= 400);
+    assert.equal(concurrentWorkspaceCreationResponse.status, 401);
     assert.equal(workspace, null);
     assert.equal(await prisma.user.findUnique({ where: { id: accountUser.id } }), null);
   }

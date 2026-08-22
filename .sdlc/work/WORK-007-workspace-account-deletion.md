@@ -26,7 +26,8 @@ account after resolving every workspace they own.
   as confirmation and rejects callers who still own a workspace.
 - Create a workspace and its initial owner membership in one serializable application transaction.
   The native Better Auth organization-create route is unavailable. Account deletion uses the same
-  transaction boundary for its owner check and user deletion.
+  transaction boundary for its owner check and user deletion. Retriable contention is bounded and
+  returns a retryable `503` only after all attempts are exhausted.
 - Existing database cascades remove the deleted user's sessions, credentials, and memberships;
   organization deletion cascades remove its links, invitations, and analytics.
 - Send the dashboard to onboarding after workspace deletion and to the signed-out landing screen
@@ -86,6 +87,10 @@ Add executable lifecycle scenarios before implementation. Drive the account endp
 controller and PostgreSQL integration tests, then add dashboard unit and browser tests for typed
 confirmation and post-deletion state.
 
+The original atomic remediation was committed with its concurrency harness, so a preserved
+pre-remediation failure run is unavailable. The follow-up regression suite directly tests retry,
+exhaustion, precise losing outcomes, and the PostgreSQL invariant.
+
 ## Verification plan
 
 Run targeted lifecycle BDD, unit, PostgreSQL integration, dashboard tests, browser E2E, coverage,
@@ -97,6 +102,8 @@ GitHub Quality workflow.
 The account endpoint needs the trusted dashboard origin and an authenticated session. It must log
 only coarse deletion outcomes and request IDs, never email values. Workspace and account deletion
 are permanent; backup restoration remains a production prerequisite rather than a launch feature.
+Lifecycle transaction events record only request ID, outcome, and attempt count. Production alerting
+for repeated retry exhaustion remains required before hosted use.
 
 ## Migration and rollback
 

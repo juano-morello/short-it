@@ -2,6 +2,7 @@ import { ForbiddenException, UnauthorizedException } from "@nestjs/common";
 import type { Request } from "express";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { auth } from "./auth.js";
+import { WorkspaceCreationRateLimiter } from "./workspace-creation-rate-limiter.js";
 import { WorkspaceLifecycleController } from "./workspace-lifecycle.controller.js";
 import type { WorkspaceLifecycleService } from "./workspace-lifecycle.service.js";
 
@@ -9,9 +10,12 @@ vi.mock("./auth.js", () => ({ auth: { api: { getSession: vi.fn() } } }));
 
 describe("WorkspaceLifecycleController", () => {
   const create = vi.fn();
-  const controller = new WorkspaceLifecycleController({
-    create,
-  } as unknown as WorkspaceLifecycleService);
+  const controller = new WorkspaceLifecycleController(
+    {
+      create,
+    } as unknown as WorkspaceLifecycleService,
+    new WorkspaceCreationRateLimiter(),
+  );
 
   beforeEach(() => vi.resetAllMocks());
 
@@ -21,11 +25,16 @@ describe("WorkspaceLifecycleController", () => {
     await expect(
       controller.createWorkspace(
         { name: "Ada Studio", slug: "ada", userId: "other-user" } as never,
-        request({ origin: "http://app.localhost:8080" }),
+        request({ origin: "http://app.localhost:8080", "x-request-id": "workspace-123" }),
       ),
     ).resolves.toBeUndefined();
 
-    expect(create).toHaveBeenCalledWith({ name: "Ada Studio", slug: "ada", userId: "user-1" });
+    expect(create).toHaveBeenCalledWith({
+      name: "Ada Studio",
+      requestId: "workspace-123",
+      slug: "ada",
+      userId: "user-1",
+    });
   });
 
   it("requires an authenticated session", async () => {

@@ -23,7 +23,7 @@ describe("AccountDeletionController", () => {
     await expect(
       controller.deleteAccount(
         { confirmationEmail: "member@example.test" },
-        request({ origin: "http://app.localhost:8080" }),
+        request({ origin: "http://app.localhost:8080", "x-request-id": "account-123" }),
       ),
     ).rejects.toBeInstanceOf(UnauthorizedException);
   });
@@ -36,13 +36,14 @@ describe("AccountDeletionController", () => {
     await expect(
       controller.deleteAccount(
         { confirmationEmail: "member@example.test", userId: "another-user" } as never,
-        request({ origin: "http://app.localhost:8080" }),
+        request({ origin: "http://app.localhost:8080", "x-request-id": "account-123" }),
       ),
     ).resolves.toBeUndefined();
 
     expect(deleteAccount).toHaveBeenCalledWith({
       confirmationEmail: "member@example.test",
       email: "member@example.test",
+      requestId: "account-123",
       userId: "member-1",
     });
   });

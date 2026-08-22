@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { request } from "node:http";
 import { Given, Then, When } from "@cucumber/cucumber";
+import { prisma } from "../src/database.js";
 
 const baseUrl = process.env.BDD_BASE_URL ?? "http://app.localhost:8080";
 const dashboardOrigin = process.env.BDD_DASHBOARD_ORIGIN ?? baseUrl;
@@ -10,7 +11,6 @@ const dashboardHostHeader =
 
 type OrganizationResponse = {
   id: string;
-  members: Array<{ role: string; userId: string }>;
   slug: string;
 };
 
@@ -376,12 +376,14 @@ async function listWorkspaceSlugs(currentVisitor: Visitor): Promise<string[]> {
   return organizations.map((organization) => organization.slug);
 }
 
-Then("the workspace exists with the visitor as its owner", () => {
+Then("the workspace exists with the visitor as its owner", async () => {
   assert.equal(signUpStatus, 200);
   assert.equal(createdWorkspace?.slug, visitor.handle);
-  assert.equal(createdWorkspace?.members.length, 1);
-  assert.deepEqual(
-    createdWorkspace?.members.map(({ role, userId }) => ({ role, userId })),
-    [{ role: "owner", userId: visitor.id }],
+  assert.ok(createdWorkspace, "A workspace is required.");
+  assert.equal(
+    await prisma.member.count({
+      where: { organizationId: createdWorkspace.id, role: "owner", userId: visitor.id },
+    }),
+    1,
   );
 });

@@ -10,7 +10,9 @@ import {
 } from "@nestjs/common";
 import type { Request } from "express";
 import { getConfig } from "../config.js";
+import { getRequestId } from "../request-id.js";
 import { auth } from "./auth.js";
+import { WorkspaceCreationRateLimiter } from "./workspace-creation-rate-limiter.js";
 import { WorkspaceLifecycleService } from "./workspace-lifecycle.service.js";
 
 type WorkspaceCreationBody = { name?: unknown; slug?: unknown };
@@ -20,6 +22,8 @@ export class WorkspaceLifecycleController {
   constructor(
     @Inject(WorkspaceLifecycleService)
     private readonly workspaceLifecycleService: WorkspaceLifecycleService,
+    @Inject(WorkspaceCreationRateLimiter)
+    private readonly workspaceCreationRateLimiter: WorkspaceCreationRateLimiter,
   ) {}
 
   @Post()
@@ -31,9 +35,11 @@ export class WorkspaceLifecycleController {
     assertTrustedOrigin(request);
     const session = await auth.api.getSession({ headers: toHeaders(request.headers) });
     if (!session) throw new UnauthorizedException();
+    this.workspaceCreationRateLimiter.take(session.user.id);
 
     return this.workspaceLifecycleService.create({
       name: body?.name,
+      requestId: getRequestId(request),
       slug: body?.slug,
       userId: session.user.id,
     });

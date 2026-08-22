@@ -11,6 +11,7 @@ import {
 } from "@nestjs/common";
 import type { Request } from "express";
 import { getConfig } from "../config.js";
+import { getRequestId } from "../request-id.js";
 import { AccountDeletionService } from "./account-deletion.service.js";
 import { auth } from "./auth.js";
 
@@ -36,6 +37,7 @@ export class AccountDeletionController {
     await this.accountDeletionService.delete({
       confirmationEmail: body?.confirmationEmail,
       email: session.user.email,
+      requestId: getRequestId(request),
       userId: session.user.id,
     });
   }
