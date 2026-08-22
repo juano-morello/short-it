@@ -4,7 +4,7 @@
 
 Source: Juano approved V1 closeout work in Codex on 2026-08-22.
 
-Status: in progress.
+Status: delivered in PRs #15 and #16 on 2026-08-22.
 
 ## Goal
 

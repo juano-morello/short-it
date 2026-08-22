@@ -11,7 +11,7 @@
 | FR-005 | Redirect analytics record clicks, daily unique visitors, referrer host, country, and device category. | Aggregation integration tests. | delivered |
 | FR-006 | Owner, editor, and analyst permissions restrict workspace behavior. | Cross-tenant and authorization tests. | delivered |
 | FR-007 | A workspace owner can irreversibly delete the workspace; an account can delete itself after resolving owned workspaces. | Lifecycle BDD scenarios. | delivered |
-| FR-008 | The API exposes unauthenticated `/api/health` and `/api/ready` probes. | Unit and BDD probe tests. | scaffolded |
+| FR-008 | The API exposes unauthenticated `/api/health` and `/api/ready` probes. | Unit and BDD probe tests. | delivered |
 
 ## Nonfunctional
 
