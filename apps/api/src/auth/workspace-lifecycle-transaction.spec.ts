@@ -75,6 +75,18 @@ describe("runWorkspaceLifecycleTransaction", () => {
     ).resolves.toBe("ok");
   });
 
+  it("retries Prisma's expired interactive-transaction error", async () => {
+    const transaction = vi
+      .fn()
+      .mockRejectedValueOnce(expiredTransaction())
+      .mockResolvedValueOnce("ok");
+
+    await expect(
+      runWorkspaceLifecycleTransaction({ $transaction: transaction } as never, async () => "done"),
+    ).resolves.toBe("ok");
+    expect(transaction).toHaveBeenCalledTimes(2);
+  });
+
   it("preserves a non-timeout transaction API fault", async () => {
     const failure = new Prisma.PrismaClientKnownRequestError("unsupported nested transaction", {
       clientVersion: "test",
@@ -106,6 +118,13 @@ function transactionTimeout(): Prisma.PrismaClientKnownRequestError {
 function transactionAcquisitionTimeout(): Prisma.PrismaClientKnownRequestError {
   return new Prisma.PrismaClientKnownRequestError(
     "Unable to start a transaction in the given time.",
+    { clientVersion: "test", code: "P2028" },
+  );
+}
+
+function expiredTransaction(): Prisma.PrismaClientKnownRequestError {
+  return new Prisma.PrismaClientKnownRequestError(
+    "Transaction already closed: Transaction is no longer valid. Last state: 'Expired'.",
     { clientVersion: "test", code: "P2028" },
   );
 }

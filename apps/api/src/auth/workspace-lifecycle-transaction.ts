@@ -46,7 +46,7 @@ function isRetryableTransactionError(error: unknown): boolean {
   if (error.code === "P2034") return true;
   return (
     error.code === "P2028" &&
-    /timeout|timed out|expired transaction|unable to start a transaction in the given time/i.test(
+    /timeout|timed out|\bexpired\b|unable to start a transaction in the given time/i.test(
       error.message,
     )
   );
