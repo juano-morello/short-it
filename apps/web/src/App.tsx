@@ -406,10 +406,10 @@ export function App() {
     return true;
   }
 
-  async function handleAccountDeletion(): Promise<boolean> {
+  async function handleAccountDeletion(confirmationEmail: string): Promise<boolean> {
     if (!accountEmail) return false;
     setIsDeletionSubmitting(true);
-    const result = await workspaceGateway.deleteAccount(accountEmail);
+    const result = await workspaceGateway.deleteAccount(confirmationEmail);
     if (result.error) {
       setIsDeletionSubmitting(false);
       return false;
@@ -580,6 +580,11 @@ export function App() {
             Create workspace
           </button>
         </form>
+        <DeletionPanel
+          accountEmail={accountEmail}
+          isSubmitting={isDeletionSubmitting}
+          onDeleteAccount={handleAccountDeletion}
+        />
       </AuthLayout>
     );
   }
@@ -694,7 +699,7 @@ function Dashboard({
   invitationListState: InvitationListState;
   invitations: PendingInvitation[];
   onCancelInvitation: (invitationId: string) => Promise<void>;
-  onDeleteAccount: () => Promise<boolean>;
+  onDeleteAccount: (confirmationEmail: string) => Promise<boolean>;
   onDeleteWorkspace: () => Promise<boolean>;
   onCreateInvitation: (
     event: FormEvent<HTMLFormElement>,
@@ -794,18 +799,18 @@ function DeletionPanel({
 }: {
   accountEmail: string | undefined;
   isSubmitting: boolean;
-  onDeleteAccount: () => Promise<boolean>;
-  onDeleteWorkspace: () => Promise<boolean>;
-  workspace: Workspace;
-  workspaceRole: WorkspaceRole;
+  onDeleteAccount: (confirmationEmail: string) => Promise<boolean>;
+  onDeleteWorkspace?: () => Promise<boolean>;
+  workspace?: Workspace;
+  workspaceRole?: WorkspaceRole;
 }) {
   const [accountConfirmation, setAccountConfirmation] = useState("");
   const [deletionError, setDeletionError] = useState<string>();
   const [workspaceConfirmation, setWorkspaceConfirmation] = useState("");
-  const isOwner = workspaceRole.split(",").includes("owner");
+  const isOwner = workspace && workspaceRole?.split(",").includes("owner");
 
   async function deleteWorkspace(): Promise<void> {
-    if (workspaceConfirmation !== workspace.slug) {
+    if (!workspace || !onDeleteWorkspace || workspaceConfirmation !== workspace.slug) {
       setDeletionError("Enter the exact workspace handle to delete this workspace.");
       return;
     }
@@ -821,7 +826,7 @@ function DeletionPanel({
       return;
     }
     setDeletionError(undefined);
-    if (!(await onDeleteAccount())) {
+    if (!(await onDeleteAccount(accountConfirmation))) {
       setDeletionError("We couldn't delete your account. Resolve owned workspaces and try again.");
     }
   }

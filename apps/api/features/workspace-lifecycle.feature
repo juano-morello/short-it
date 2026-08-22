@@ -8,9 +8,19 @@ Feature: Irreversible workspace and account deletion
     When the owner deletes the workspace
     Then the workspace and its scoped records no longer exist
 
-  Scenario: A non-owner cannot delete a workspace
+  Scenario: An editor cannot delete another workspace
     Given a signed-in workspace editor and another workspace
     When the editor deletes the other workspace
+    Then the workspace deletion is forbidden and the other workspace remains
+
+  Scenario: An analyst cannot delete another workspace
+    Given a signed-in workspace analyst and another workspace
+    When the analyst deletes the other workspace
+    Then the workspace deletion is forbidden and the other workspace remains
+
+  Scenario: An owner cannot delete a workspace they do not own
+    Given a signed-in workspace owner and another workspace
+    When the owner deletes the other workspace
     Then the workspace deletion is forbidden and the other workspace remains
 
   Scenario: An account owner cannot delete their account
@@ -21,4 +31,4 @@ Feature: Irreversible workspace and account deletion
   Scenario: A user without an owned workspace permanently deletes their account
     Given a signed-in user without an owned workspace
     When the user requests account deletion with their email confirmation
-    Then the account, session, and memberships no longer exist
+    Then the account, credentials, session, and memberships no longer exist

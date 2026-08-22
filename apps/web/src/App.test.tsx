@@ -701,6 +701,27 @@ describe("App", () => {
     expect(await screen.findByRole("button", { name: "Create a workspace" })).toBeInTheDocument();
     expect(workspaceGateway.deleteAccount).toHaveBeenCalledWith("member@example.test");
   });
+
+  it("lets a workspace-free user delete their account from onboarding", async () => {
+    vi.mocked(workspaceGateway.getSession)
+      .mockResolvedValueOnce({
+        data: { user: { email: "owner@example.test", id: "owner-1" } },
+      } as never)
+      .mockResolvedValueOnce({ data: null } as never);
+    vi.mocked(workspaceGateway.listWorkspaces).mockResolvedValue({ data: [] } as never);
+    vi.mocked(workspaceGateway.deleteAccount).mockResolvedValue({ data: {} } as never);
+
+    render(<App />);
+
+    await screen.findByRole("heading", { name: "Create your workspace" });
+    fireEvent.change(screen.getByLabelText("Confirm account email"), {
+      target: { value: "owner@example.test" },
+    });
+    fireEvent.submit(getForm("Delete account permanently"));
+
+    expect(await screen.findByRole("button", { name: "Create a workspace" })).toBeInTheDocument();
+    expect(workspaceGateway.deleteAccount).toHaveBeenCalledWith("owner@example.test");
+  });
 });
 
 function getForm(buttonName: string): HTMLFormElement {

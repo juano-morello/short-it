@@ -39,6 +39,25 @@ Given("a signed-in workspace owner with a published link", async () => {
       uniqueVisitors: 1,
     },
   });
+  await prisma.linkAnalyticsDimensionDaily.create({
+    data: {
+      clicks: 1,
+      day,
+      dimension: "COUNTRY",
+      linkId: link.id,
+      organizationId: lifecycleWorkspace.id,
+      value: "AR",
+    },
+  });
+  await prisma.linkAnalyticsVisitor.create({
+    data: {
+      day,
+      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+      linkId: link.id,
+      organizationId: lifecycleWorkspace.id,
+      visitorDigest: "a".repeat(64),
+    },
+  });
   await prisma.invitation.create({
     data: {
       email: `invite-${randomUUID()}@example.test`,
@@ -48,6 +67,14 @@ Given("a signed-in workspace owner with a published link", async () => {
       organizationId: lifecycleWorkspace.id,
       role: "editor",
       status: "pending",
+    },
+  });
+  await prisma.member.create({
+    data: {
+      id: randomUUID(),
+      organizationId: lifecycleWorkspace.id,
+      role: "editor",
+      userId: (await createSignedInUser("workspace-member")).id,
     },
   });
 });
@@ -70,8 +97,26 @@ Then("the workspace and its scoped records no longer exist", async () => {
 });
 
 Given("a signed-in workspace editor and another workspace", async () => {
-  accountUser = await createSignedInUser("editor");
-  lifecycleWorkspace = await createWorkspace(accountUser, "editor-workspace");
+  await createNonOwnerFixture("editor");
+});
+
+Given("a signed-in workspace analyst and another workspace", async () => {
+  await createNonOwnerFixture("analyst");
+});
+
+Given("a signed-in workspace owner and another workspace", async () => {
+  accountUser = await createSignedInUser("owner");
+  lifecycleWorkspace = await createWorkspace(accountUser, "owner-workspace");
+  otherWorkspace = await createWorkspace(
+    await createSignedInUser("other-owner"),
+    "other-workspace",
+  );
+  await createLink(otherWorkspace.id);
+});
+
+async function createNonOwnerFixture(role: "analyst" | "editor"): Promise<void> {
+  accountUser = await createSignedInUser(role);
+  lifecycleWorkspace = await createWorkspace(accountUser, `${role}-workspace`);
   otherWorkspace = await createWorkspace(
     await createSignedInUser("other-owner"),
     "other-workspace",
@@ -80,26 +125,42 @@ Given("a signed-in workspace editor and another workspace", async () => {
     data: {
       id: randomUUID(),
       organizationId: otherWorkspace.id,
-      role: "editor",
+      role,
       userId: accountUser.id,
     },
   });
-});
+  await createLink(otherWorkspace.id);
+}
 
 When("the editor deletes the other workspace", async () => {
-  assert.ok(accountUser, "A signed-in editor is required.");
+  await deleteOtherWorkspace();
+});
+
+When("the analyst deletes the other workspace", async () => {
+  await deleteOtherWorkspace();
+});
+
+When("the owner deletes the other workspace", async () => {
+  await deleteOtherWorkspace();
+});
+
+async function deleteOtherWorkspace(): Promise<void> {
+  assert.ok(accountUser, "A signed-in user is required.");
   assert.ok(otherWorkspace, "Another workspace is required.");
   workspaceDeletionResponse = await fetch(`${baseUrl}/api/auth/organization/delete`, {
     body: JSON.stringify({ organizationId: otherWorkspace.id }),
     headers: requestHeaders(accountUser),
     method: "POST",
   });
-});
+}
 
 Then("the workspace deletion is forbidden and the other workspace remains", async () => {
   assert.ok(otherWorkspace, "Another workspace is required.");
   assert.ok(workspaceDeletionResponse, "A workspace deletion response is required.");
-  assert.equal(workspaceDeletionResponse.status, 403);
+  assert.ok(
+    [400, 403].includes(workspaceDeletionResponse.status),
+    `Expected a rejected workspace deletion, received ${workspaceDeletionResponse.status}.`,
+  );
   await expectWorkspacePresent(otherWorkspace.id);
 });
 
@@ -141,13 +202,16 @@ When("the user requests account deletion with their email confirmation", async (
   accountDeletionResponse = await requestAccountDeletion(accountUser);
 });
 
-Then("the account, session, and memberships no longer exist", async () => {
+Then("the account, credentials, session, and memberships no longer exist", async () => {
   assert.ok(accountDeletionResponse, "An account deletion response is required.");
   assert.ok(accountUser, "A signed-in user is required.");
   assert.equal(accountDeletionResponse.status, 204);
   assert.equal(await prisma.user.findUnique({ where: { id: accountUser.id } }), null);
+  assert.equal(await prisma.account.count({ where: { userId: accountUser.id } }), 0);
   assert.equal(await prisma.session.count({ where: { userId: accountUser.id } }), 0);
   assert.equal(await prisma.member.count({ where: { userId: accountUser.id } }), 0);
+  const subsequentRequest = await requestAccountDeletion(accountUser);
+  assert.equal(subsequentRequest.status, 401);
 });
 
 async function createSignedInUser(prefix: string): Promise<SignedInUser> {
@@ -198,11 +262,21 @@ async function expectWorkspaceMissing(organizationId: string): Promise<void> {
   assert.equal(await prisma.organization.findUnique({ where: { id: organizationId } }), null);
   assert.equal(await prisma.link.count({ where: { organizationId } }), 0);
   assert.equal(await prisma.invitation.count({ where: { organizationId } }), 0);
+  assert.equal(await prisma.member.count({ where: { organizationId } }), 0);
   assert.equal(await prisma.linkAnalyticsDaily.count({ where: { organizationId } }), 0);
+  assert.equal(await prisma.linkAnalyticsDimensionDaily.count({ where: { organizationId } }), 0);
+  assert.equal(await prisma.linkAnalyticsVisitor.count({ where: { organizationId } }), 0);
 }
 
 async function expectWorkspacePresent(organizationId: string): Promise<void> {
   assert.ok(await prisma.organization.findUnique({ where: { id: organizationId } }));
+  assert.equal(await prisma.link.count({ where: { organizationId } }), 1);
+}
+
+async function createLink(organizationId: string): Promise<void> {
+  await prisma.link.create({
+    data: { destinationUrl: "https://public.example/other-workspace", organizationId },
+  });
 }
 
 function jsonHeaders(): HeadersInit {

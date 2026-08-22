@@ -4,8 +4,9 @@ import { expect, type Page, test } from "@playwright/test";
 test("an owner deletes a workspace after confirming its handle", async ({ page }) => {
   const suffix = randomUUID().replaceAll("-", "").slice(0, 12);
   const handle = `delete${suffix}`;
+  const email = `owner-${suffix}@example.test`;
 
-  await createWorkspace(page, `owner-${suffix}@example.test`, "Deletion Owner", handle);
+  await createWorkspace(page, email, "Deletion Owner", handle);
 
   await page.getByLabel("Confirm workspace handle").fill("wrong");
   await page.getByRole("button", { name: "Delete workspace permanently" }).click();
@@ -17,6 +18,9 @@ test("an owner deletes a workspace after confirming its handle", async ({ page }
   await page.getByRole("button", { name: "Delete workspace permanently" }).click();
 
   await expect(page.getByRole("heading", { name: "Create your workspace" })).toBeVisible();
+  await page.getByLabel("Confirm account email").fill(email);
+  await page.getByRole("button", { name: "Delete account permanently" }).click();
+  await expect(page.getByRole("button", { name: "Create a workspace" })).toBeVisible();
 });
 
 test("a non-owner deletes their account after confirming their email", async ({
