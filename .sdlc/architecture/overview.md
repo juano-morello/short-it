@@ -48,12 +48,15 @@ browser fragment, are cleared from history before network work, and require an e
 matching-email acceptance. Accepted and cancelled rows are deleted immediately; a five-minute job
 removes expired pending rows and any terminal-row cleanup residue.
 
-An owner may delete a workspace through Better Auth's static organization-delete permission. The
-dashboard requires the workspace handle before submitting that irreversible request. An
-authenticated account-deletion endpoint derives the caller from the session, requires the matching
-account email, rejects any owner membership, and deletes only that user record. Database cascades
-remove the deleted workspace's scoped records and the deleted account's sessions, credentials, and
-memberships.
+The application owns workspace creation at `POST /api/workspaces`. It creates the organization and
+its owner membership in one serializable PostgreSQL transaction, with the authenticated user and
+existing membership count inside that transaction. Better Auth's native organization-create route
+is unavailable. Better Auth retains the static owner-authorized organization-delete route; the
+dashboard requires the workspace handle before calling it. Account deletion runs its owner check
+and user deletion in the same serializable lifecycle transaction. A concurrent workspace creation
+therefore either commits with its owner or aborts, never leaving an ownerless organization.
+Database cascades remove the deleted workspace's scoped records and the deleted account's sessions,
+credentials, and memberships.
 
 ## Integrations and public contracts
 

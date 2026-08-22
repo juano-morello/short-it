@@ -162,9 +162,8 @@ When(
 );
 
 When("the visitor attempts workspace creation with a name longer than 120 characters", async () => {
-  workspaceResponse = await fetch(`${baseUrl}/api/auth/organization/create`, {
+  workspaceResponse = await fetch(`${baseUrl}/api/workspaces`, {
     body: JSON.stringify({
-      keepCurrentActiveOrganization: true,
       name: "a".repeat(121),
       slug: visitor.handle,
     }),
@@ -348,9 +347,8 @@ async function createWorkspace(
 }
 
 async function createWorkspaceResponse(currentVisitor: Visitor, handle: string): Promise<Response> {
-  return fetch(`${baseUrl}/api/auth/organization/create`, {
+  return fetch(`${baseUrl}/api/workspaces`, {
     body: JSON.stringify({
-      keepCurrentActiveOrganization: true,
       name: "Visitor Workspace",
       slug: handle,
     }),

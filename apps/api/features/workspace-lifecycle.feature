@@ -32,3 +32,13 @@ Feature: Irreversible workspace and account deletion
     Given a signed-in user without an owned workspace
     When the user requests account deletion with their email confirmation
     Then the account, credentials, session, and memberships no longer exist
+
+  Scenario: Workspace creation and account deletion do not leave an ownerless workspace
+    Given a signed-in user without a workspace
+    When the user concurrently creates a workspace and deletes their account
+    Then exactly one lifecycle operation succeeds without an ownerless workspace
+
+  Scenario: Native workspace creation is unavailable
+    Given a signed-in user without a workspace
+    When the user calls the native workspace creation route
+    Then native workspace creation is rejected

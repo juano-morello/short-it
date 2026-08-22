@@ -24,9 +24,11 @@ account after resolving every workspace they own.
 - Use Better Auth's existing owner-authorized organization deletion operation for the workspace.
 - Add an authenticated, trusted-origin account-deletion endpoint that requires the signed-in email
   as confirmation and rejects callers who still own a workspace.
-- Delete the caller's user record only after the ownership check. Existing database cascades remove
-  that user's sessions, credentials, and memberships; organization deletion cascades remove its
-  links, invitations, and analytics.
+- Create a workspace and its initial owner membership in one serializable application transaction.
+  The native Better Auth organization-create route is unavailable. Account deletion uses the same
+  transaction boundary for its owner check and user deletion.
+- Existing database cascades remove the deleted user's sessions, credentials, and memberships;
+  organization deletion cascades remove its links, invitations, and analytics.
 - Send the dashboard to onboarding after workspace deletion and to the signed-out landing screen
   after account deletion.
 
@@ -45,26 +47,33 @@ this work item.
 - A signed-in user who owns no workspace can confirm their email, delete their account, lose the
   session, and create no further authenticated requests.
 - A wrong account-email confirmation performs no deletion.
+- A concurrent workspace-create and account-delete request cannot leave an ownerless workspace.
 
 ## Proposed approach
 
 Keep the organization deletion authority in Better Auth's static owner permission. The dashboard
-requires a typed workspace handle before it calls that operation. A narrow NestJS account endpoint
-derives the user from the session, checks owner memberships through Prisma, requires the matching
-session email, and deletes the same user record. It never accepts a user ID from the browser.
+requires a typed workspace handle before it calls that operation. A narrow NestJS workspace endpoint
+creates the organization and owner membership in one serializable transaction, and disables the
+native Better Auth create route. The account endpoint derives the user from the session, requires
+the matching session email, and performs its ownership check and user deletion in that same
+transactional lifecycle boundary. Neither endpoint accepts a user ID from the browser.
 
 ## Alternatives and tradeoffs
 
 Fresh-password reauthentication would better protect an already compromised session, but it would
 add a new authentication flow outside launch scope. Typed confirmation protects against accidental
-actions but does not provide fresh authentication. Better Auth already checks workspace deletion
-authority; a second application-owned workspace deletion API would duplicate that boundary.
+actions but does not provide fresh authentication. The native Better Auth create route uses separate
+organization and member writes, so retaining it would leave account deletion vulnerable to an
+ownerless-workspace race. The application therefore owns only workspace creation; Better Auth keeps
+workspace deletion authority.
 
 ## Consequential decisions
 
 Juano approved typed confirmation for launch: workspace handle for a workspace and signed-in email
 for an account. Account deletion remains unavailable while any owned workspace exists. Ownership
-transfer and recovery remain deferred.
+transfer and recovery remain deferred. After final review, Juano also approved application-owned,
+serializable workspace creation with the native Better Auth create route disabled. No dependency or
+schema migration is required.
 
 ## Risks and dependencies
 

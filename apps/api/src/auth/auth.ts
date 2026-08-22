@@ -89,6 +89,10 @@ export const auth = betterAuth({
         assertDisplayName(context.body.name, "Account");
       }
 
+      if (context.path === "/organization/create") {
+        throw new APIError("NOT_FOUND");
+      }
+
       if (
         context.path === "/organization/list-invitations" ||
         context.path === "/organization/get-full-organization"

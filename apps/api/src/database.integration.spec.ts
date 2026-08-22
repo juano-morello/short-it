@@ -1,4 +1,5 @@
 import { execFileSync } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { ConflictException, ForbiddenException, NotFoundException } from "@nestjs/common";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";
@@ -6,6 +7,8 @@ import { PostgreSqlContainer, type StartedPostgreSqlContainer } from "@testconta
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { AnalyticsCaptureService } from "./analytics/analytics-capture.service.js";
 import { pruneAnalytics } from "./analytics/analytics-retention.js";
+import { AccountDeletionService } from "./auth/account-deletion.service.js";
+import { WorkspaceLifecycleService } from "./auth/workspace-lifecycle.service.js";
 import { LinksService } from "./links/links.service.js";
 import { PublicRedirectService } from "./redirect/public-redirect.service.js";
 
@@ -130,6 +133,41 @@ describe("PostgreSQL integration", () => {
     );
 
     await expect(testPrisma.link.count()).resolves.toBe(before);
+  });
+
+  it("commits a concurrent workspace creation or account deletion without an ownerless workspace", async () => {
+    const suffix = randomUUID().replaceAll("-", "").slice(0, 12);
+    const userId = `lifecycle-user-${suffix}`;
+    const slug = `lifecycle-${suffix}`;
+    await testPrisma.user.create({
+      data: { id: userId, email: `${userId}@example.test`, name: "Lifecycle User" },
+    });
+    const workspaceLifecycle = WorkspaceLifecycleService.forTesting({
+      database: testPrisma as never,
+    });
+    const accountDeletion = AccountDeletionService.forTesting({ database: testPrisma as never });
+
+    const outcomes = await Promise.allSettled([
+      workspaceLifecycle.create({ name: "Lifecycle Workspace", slug, userId }),
+      accountDeletion.delete({
+        confirmationEmail: `${userId}@example.test`,
+        email: `${userId}@example.test`,
+        userId,
+      }),
+    ]);
+
+    expect(outcomes.filter((outcome) => outcome.status === "fulfilled")).toHaveLength(1);
+    const workspace = await testPrisma.organization.findUnique({ where: { slug } });
+    if (workspace) {
+      await expect(testPrisma.user.findUnique({ where: { id: userId } })).resolves.toBeTruthy();
+      await expect(
+        testPrisma.member.count({
+          where: { organizationId: workspace.id, role: "owner", userId },
+        }),
+      ).resolves.toBe(1);
+    } else {
+      await expect(testPrisma.user.findUnique({ where: { id: userId } })).resolves.toBeNull();
+    }
   });
 
   it("does not publish more than 1,000 links for one workspace", async () => {

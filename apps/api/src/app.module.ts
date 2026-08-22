@@ -6,6 +6,8 @@ import { AccountDeletionController } from "./auth/account-deletion.controller.js
 import { AccountDeletionService } from "./auth/account-deletion.service.js";
 import { WorkspaceInvitationController } from "./auth/workspace-invitation.controller.js";
 import { WorkspaceInvitationService } from "./auth/workspace-invitation.service.js";
+import { WorkspaceLifecycleController } from "./auth/workspace-lifecycle.controller.js";
+import { WorkspaceLifecycleService } from "./auth/workspace-lifecycle.service.js";
 import { WorkspaceMembershipController } from "./auth/workspace-membership.controller.js";
 import { WorkspaceMembershipService } from "./auth/workspace-membership.service.js";
 import { HealthController } from "./health/health.controller.js";
@@ -22,6 +24,7 @@ import { PublicRedirectService } from "./redirect/public-redirect.service.js";
     LinksController,
     PublicRedirectController,
     WorkspaceInvitationController,
+    WorkspaceLifecycleController,
     WorkspaceMembershipController,
   ],
   providers: [
@@ -31,6 +34,7 @@ import { PublicRedirectService } from "./redirect/public-redirect.service.js";
     LinksService,
     PublicRedirectService,
     WorkspaceInvitationService,
+    WorkspaceLifecycleService,
     WorkspaceMembershipService,
   ],
 })
