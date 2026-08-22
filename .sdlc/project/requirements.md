@@ -8,7 +8,7 @@
 | FR-002 | A workspace owner can invite editor and analyst members using a copyable invitation link. | Role and invitation BDD scenarios. | planned |
 | FR-003 | A workspace can create an HTTP or HTTPS link with a server-generated CUID slug. Vanity slugs are planned for v1.1. | API contract, validation, and browser scenario. | delivered |
 | FR-004 | A public workspace host resolves a slug and redirects to its immutable destination. | Redirect integration and resilience tests. | delivered |
-| FR-005 | Redirect analytics record clicks, daily unique visitors, referrer host, country, and device category. | Aggregation integration tests. | planned |
+| FR-005 | Redirect analytics record clicks, daily unique visitors, referrer host, country, and device category. | Aggregation integration tests. | in progress |
 | FR-006 | Owner, editor, and analyst permissions restrict workspace behavior. | Cross-tenant and authorization tests. | planned |
 | FR-007 | A workspace owner can irreversibly delete the workspace; an account can delete itself after resolving owned workspaces. | Lifecycle BDD scenarios. | planned |
 | FR-008 | The API exposes unauthenticated `/api/health` and `/api/ready` probes. | Unit and BDD probe tests. | scaffolded |
