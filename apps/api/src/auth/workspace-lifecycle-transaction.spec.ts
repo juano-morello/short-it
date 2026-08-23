@@ -12,9 +12,12 @@ describe("runWorkspaceLifecycleTransaction", () => {
     const transaction = vi.fn().mockRejectedValueOnce(conflict).mockResolvedValueOnce("committed");
 
     await expect(
-      runWorkspaceLifecycleTransaction({ $transaction: transaction } as never, async () => "done", {
-        requestId: "lifecycle-123",
-      }),
+      runWorkspaceLifecycleTransaction(
+        { $transaction: transaction } as never,
+        "user-1",
+        async () => "done",
+        { requestId: "lifecycle-123" },
+      ),
     ).resolves.toBe("committed");
 
     expect(transaction).toHaveBeenCalledTimes(2);
@@ -35,9 +38,12 @@ describe("runWorkspaceLifecycleTransaction", () => {
     const transaction = vi.fn().mockRejectedValue(serializationConflict());
 
     await expect(
-      runWorkspaceLifecycleTransaction({ $transaction: transaction } as never, async () => "done", {
-        requestId: "lifecycle-456",
-      }),
+      runWorkspaceLifecycleTransaction(
+        { $transaction: transaction } as never,
+        "user-1",
+        async () => "done",
+        { requestId: "lifecycle-456" },
+      ),
     ).rejects.toEqual(
       new ServiceUnavailableException(
         "Workspace lifecycle request is temporarily unavailable. Please retry.",
@@ -59,9 +65,45 @@ describe("runWorkspaceLifecycleTransaction", () => {
       .mockResolvedValueOnce("ok");
 
     await expect(
-      runWorkspaceLifecycleTransaction({ $transaction: transaction } as never, async () => "done"),
+      runWorkspaceLifecycleTransaction(
+        { $transaction: transaction } as never,
+        "user-1",
+        async () => "done",
+      ),
     ).resolves.toBe("ok");
     expect(transaction).toHaveBeenCalledTimes(2);
+  });
+
+  it("retries an adapter-wrapped PostgreSQL serialization failure", async () => {
+    const transaction = vi
+      .fn()
+      .mockRejectedValueOnce(adapterWrappedSerializationFailure())
+      .mockResolvedValueOnce("ok");
+
+    await expect(
+      runWorkspaceLifecycleTransaction(
+        { $transaction: transaction } as never,
+        "user-1",
+        async () => "done",
+      ),
+    ).resolves.toBe("ok");
+    expect(transaction).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not retry another adapter-wrapped PostgreSQL error", async () => {
+    const failure = Object.assign(new Error("DriverAdapterError: UniqueConstraintViolation"), {
+      cause: { kind: "UniqueConstraintViolation", originalCode: "23505" },
+    });
+    const transaction = vi.fn().mockRejectedValue(failure);
+
+    await expect(
+      runWorkspaceLifecycleTransaction(
+        { $transaction: transaction } as never,
+        "user-1",
+        async () => "done",
+      ),
+    ).rejects.toBe(failure);
+    expect(transaction).toHaveBeenCalledOnce();
   });
 
   it("retries a transaction-acquisition timeout", async () => {
@@ -71,7 +113,11 @@ describe("runWorkspaceLifecycleTransaction", () => {
       .mockResolvedValueOnce("ok");
 
     await expect(
-      runWorkspaceLifecycleTransaction({ $transaction: transaction } as never, async () => "done"),
+      runWorkspaceLifecycleTransaction(
+        { $transaction: transaction } as never,
+        "user-1",
+        async () => "done",
+      ),
     ).resolves.toBe("ok");
   });
 
@@ -82,7 +128,11 @@ describe("runWorkspaceLifecycleTransaction", () => {
       .mockResolvedValueOnce("ok");
 
     await expect(
-      runWorkspaceLifecycleTransaction({ $transaction: transaction } as never, async () => "done"),
+      runWorkspaceLifecycleTransaction(
+        { $transaction: transaction } as never,
+        "user-1",
+        async () => "done",
+      ),
     ).resolves.toBe("ok");
     expect(transaction).toHaveBeenCalledTimes(2);
   });
@@ -95,9 +145,42 @@ describe("runWorkspaceLifecycleTransaction", () => {
     const transaction = vi.fn().mockRejectedValue(failure);
 
     await expect(
-      runWorkspaceLifecycleTransaction({ $transaction: transaction } as never, async () => "done"),
+      runWorkspaceLifecycleTransaction(
+        { $transaction: transaction } as never,
+        "user-1",
+        async () => "done",
+      ),
     ).rejects.toBe(failure);
     expect(transaction).toHaveBeenCalledOnce();
+  });
+
+  it("locks the session-derived user before invoking the lifecycle operation", async () => {
+    const lockUser = vi.fn().mockResolvedValue([{ id: "user-1" }]);
+    const operation = vi.fn().mockResolvedValue("committed");
+    const transaction = vi.fn(async (callback) => callback({ $queryRaw: lockUser }));
+
+    await expect(
+      runWorkspaceLifecycleTransaction({ $transaction: transaction } as never, "user-1", operation),
+    ).resolves.toBe("committed");
+
+    expect(lockUser).toHaveBeenCalledOnce();
+    expect(operation).toHaveBeenCalledOnce();
+    expect(lockUser.mock.invocationCallOrder[0]).toBeLessThan(
+      operation.mock.invocationCallOrder[0],
+    );
+  });
+
+  it("rejects a missing user before invoking the lifecycle operation", async () => {
+    const operation = vi.fn();
+    const transaction = vi.fn(async (callback) =>
+      callback({ $queryRaw: vi.fn().mockResolvedValue([]) }),
+    );
+
+    await expect(
+      runWorkspaceLifecycleTransaction({ $transaction: transaction } as never, "user-1", operation),
+    ).rejects.toMatchObject({ status: 401 });
+
+    expect(operation).not.toHaveBeenCalled();
   });
 });
 
@@ -127,4 +210,10 @@ function expiredTransaction(): Prisma.PrismaClientKnownRequestError {
     "Transaction already closed: Transaction is no longer valid. Last state: 'Expired'.",
     { clientVersion: "test", code: "P2028" },
   );
+}
+
+function adapterWrappedSerializationFailure(): Error {
+  return Object.assign(new Error("DriverAdapterError: TransactionWriteConflict"), {
+    cause: { kind: "TransactionWriteConflict", originalCode: "40001" },
+  });
 }

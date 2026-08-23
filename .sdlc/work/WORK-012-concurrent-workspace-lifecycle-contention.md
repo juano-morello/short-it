@@ -8,8 +8,9 @@ execution passes. The current generic lifecycle retry classifier does not recogn
 adapter-wrapped `40001` form. CSS remediation is tracked independently in PR #20 and is not a
 dependency or source of changes for this work item.
 
-Status: refined as a bugfix and awaiting Juano's design approval. Plan mode is not active in this
-task, so this document is the equivalent approval brief.
+Status: approved by Juano on 2026-08-22, with native membership-mutation restrictions approved on
+2026-08-23. Implementation is ready for review. Plan mode is not active in this task, so this
+document is the equivalent approval brief.
 
 ## Goal
 
@@ -37,7 +38,8 @@ ownerless workspace.
   writes.
 - Preserve the current creation limit, session-derived identity, trusted-origin checks, native
   Better Auth create-route rejection, typed account-email confirmation, owner-role evaluation, and
-  privacy-safe lifecycle logging.
+  privacy-safe lifecycle logging. Reject Better Auth's native member-role update, leave, and
+  member-removal routes while ownership and membership mutation remain out of scope.
 - Make transaction error classification recognize the adapter-wrapped PostgreSQL `40001` shape as a
   defensive fallback. This is not the primary remediation and must not be the only behavior change.
 - Add deterministic unit, PostgreSQL integration, BDD, and seven-worker browser regression
@@ -127,8 +129,7 @@ ID, outcome, and attempt count. No migration is expected.
    immediate error shape but preserves unnecessary independent-user aborts, adds tail latency, and
    can still exhaust the retry budget. Rejected.
 2. Use `READ COMMITTED` plus a `User` row lock. This gives the required same-user ordering and
-   independent-user concurrency with a short, comprehensible critical section. Proposed, subject to
-   design approval.
+   independent-user concurrency with a short, comprehensible critical section. Approved.
 3. Lock `Member` rows or the `Member` table. Empty membership sets cannot be protected by row locks,
    while a table lock recreates global contention. Rejected.
 4. Use transaction-scoped advisory locks keyed by user ID. This can work but adds a second locking
@@ -171,9 +172,10 @@ decision is requested.
 
 ## TDD and BDD strategy
 
-1. Preserve a failing seven-distinct-user PostgreSQL regression that overlaps creation after the
-   membership read and shows the current serializable failure or retry-exhaustion path. Capture the
-   adapter-wrapped `40001` shape from that run for a focused classifier test.
+1. Preserve the pre-change evidence: the reported seven-worker browser failure, a serializable
+   create/delete PostgreSQL race that logged a retry, and focused red unit assertions for the new
+   lock boundary and adapter-wrapped SQLSTATE handling. Confirm the classifier against Prisma 7.9.1
+   driver-adapter errors that expose `cause.originalCode`.
 2. Add unit tests first for lock acquisition before membership access, missing-user behavior, the
    maximum-workspace race, parameterized query use, and the exact retry classifier boundary.
 3. Replace the current same-user post-read barrier with lock-aware PostgreSQL integration tests:
@@ -212,12 +214,57 @@ Operationally, a sustained increase in lock waits or retry exhaustion should ret
 privacy-safe `workspace_lifecycle_transaction` monitoring. The delivery report must compare
 seven-worker results before and after the change and document any remaining transient error class.
 
+## Resolved verification finding
+
+The post-implementation security review established that Better Auth exposes
+`POST /organization/update-member-role`. The current hook configuration does not reject that route,
+and the owner role has `member:update`. An owner can promote a deleting editor to owner, demote
+themself while two owners exist, and let the deletion cascade the newly promoted owner's membership.
+That role update does not acquire the deleting user's lock. Under `READ COMMITTED`, the deletion can
+therefore complete after a stale non-owner membership read and leave the organization ownerless.
+
+The approved create/delete lock alone was insufficient to preserve FR-007. Juano approved the
+smallest scope change on 2026-08-23:
+
+1. Reject `POST /organization/update-member-role` while ownership transfer remains out of scope.
+   This removes the ungoverned Better Auth capability and ensures no owner-role mutation can race
+   account deletion.
+
+The lifecycle feature now proves the native route is unavailable. Before hosted rollout, use the
+production connection-pool and replica configuration to run a hot-same-user burst beside seven
+independent onboarding requests. Record acceptable pool saturation, p95 and p99 lifecycle latency,
+and 503 thresholds; block rollout if they are exceeded.
+
+Final security review found a separate ownerless-workspace race in Better Auth's exposed native
+`POST /organization/remove-member` and `POST /organization/leave` routes. With two owners,
+concurrent requests can each observe two owners before deleting their membership, and the schema has
+no owner-count constraint. Juano approved rejection of both routes on 2026-08-23 while membership
+removal remains out of scope. The lifecycle feature sends both requests concurrently from distinct
+owners and proves they return `404` without changing the two-owner workspace.
+
 ## Migration and rollback
 
 No Prisma migration or data backfill is expected. Roll back by reverting the application commit if
 lock-wait latency, unexpected deadlocks, or invariant failures appear. This rollback changes future
 transaction behavior only; it cannot restore accounts or workspaces already deleted, so rollout
 evidence must include the irreversible-operation acceptance scenarios before any hosted release.
+
+## Final verification evidence
+
+The final local run passed 219 API unit tests, 15 PostgreSQL integration tests, and 89.35 percent
+API statement coverage. All BDD profiles passed; the lifecycle feature has 10 scenarios and 40
+steps, including the native-role and two-owner removal denials. The standard `pnpm e2e` command ran
+14 tests with the configured seven workers, and the explicit one-worker diagnostic control passed
+the same 14 tests. Formatting, linting, type checking, Prisma validation, application and Storybook
+builds, Compose validation, Docker builds, production-image prune smoke, and production plus full
+dependency audits passed. Independent product, technical, test, security, operations, and
+engineering-excellence reviews found no code-level blocker.
+
+The operations review leaves one hosted-rollout condition: before deployment, run a hot same-user
+burst beside seven independent onboarding requests using the selected production pool and replica
+configuration. Define and meet connection-saturation, p95 and p99 lifecycle-latency, and 503
+thresholds. Ensure request latency is available from ingress or APM telemetry before relying on the
+lifecycle incident runbook.
 
 ## Agent roster and routing
 
@@ -235,5 +282,5 @@ read-only gates; no parallel writers should touch the coupled lifecycle boundary
 
 ## Approval
 
-Awaiting Juano's explicit approval of the transaction-policy decision above. No implementation may
-begin before that approval.
+Approved by Juano on 2026-08-22. Implementation is limited to the approved transaction boundary and
+its regression coverage.

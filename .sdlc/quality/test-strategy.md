@@ -11,9 +11,11 @@ authenticated workspace reporting, and aggregate retention. WORK-006 covers owne
 creation, matching-email acceptance with confirmation, role scope, atomic cancellation, and retention.
 WORK-007 covers owner-only workspace deletion, account-deletion ownership checks, typed
 confirmation, cascade behavior, native-create rejection, and the concurrent workspace-create and
-account-delete lifecycle boundary. Unit coverage exercises bounded lifecycle retry and retryable
-exhaustion behavior. The live lifecycle scenarios require the losing create request to return its
-session-derived `401`, not an internal error.
+account-delete lifecycle boundary and native membership-mutation rejection. Unit coverage exercises
+bounded lifecycle retry and retryable exhaustion behavior. WORK-012 adds PostgreSQL races that prove the same-user user-row lock preserves
+the create/delete invariant and maximum workspace count while seven independent users create
+workspaces without retries. The live lifecycle scenarios require the losing create request to return
+its session-derived `401`, not an internal error.
 
 ## Outside-in TDD workflow
 
@@ -47,7 +49,9 @@ dashboard components and supports future visual checks.
 WORK-007 adds browser coverage for workspace-handle and account-email confirmation, and returns the
 user to onboarding or the signed-out landing screen after deletion. Its live lifecycle scenarios
 also prove that concurrent workspace creation and account deletion produce either an owned workspace
-or a deleted account, never an ownerless workspace.
+or a deleted account, never an ownerless workspace. WORK-012 runs seven independently scheduled
+onboarding tests at seven workers as the onboarding-contention regression and uses serial execution only as a diagnostic
+control.
 
 ## Test data and isolation
 
