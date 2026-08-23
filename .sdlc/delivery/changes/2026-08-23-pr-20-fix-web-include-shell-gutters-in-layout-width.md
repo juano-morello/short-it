@@ -14,12 +14,12 @@ This closes a presentation defect in the existing dashboard and self-service UI.
 
 ## Verification
 
-Evidence class: proven by the merged implementation, focused stylesheet regression test, and rendered browser checks. The regression test failed before the rule was added and passed afterward. At a 360px viewport, the shell measured 360px with no horizontal overflow and 24px padding on both sides. At a 1425px viewport, the shell measured 1100px with equal 162.5px outer margins.
+Evidence class: rendered browser checks, plus historic red/green test evidence recorded in the approved work brief. The brief reports that the focused stylesheet regression test failed before the rule was added and passed afterward. At a 360px viewport, the shell measured 360px with no horizontal overflow and 24px padding on both sides. At a 1425px viewport, the shell measured 1100px with equal 162.5px outer margins.
 
 The refreshed GitHub Quality workflow passed in 5m55s after PR 21 resolved the unrelated concurrent workspace-lifecycle failure. Product, technical, test, security, operations, and engineering-excellence reviews found no code-level blocker.
 
 ## Security, operations, and follow-up
 
-The change adds no runtime contract, data flow, dependency, migration, or deployment behavior. The lifecycle E2E failure first observed during this work was independently addressed by PR 21; this CSS record does not depend on that implementation.
+The change adds no runtime contract, data flow, dependency, migration, or deployment behavior. It does not depend on the separate lifecycle implementation delivered by PR 21.
 
 Authoritative project record: `.sdlc/work/WORK-011-center-ui-shell.md`.
