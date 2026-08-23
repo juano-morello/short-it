@@ -94,6 +94,14 @@ export const auth = betterAuth({
       }
 
       if (
+        context.path === "/organization/leave" ||
+        context.path === "/organization/remove-member" ||
+        context.path === "/organization/update-member-role"
+      ) {
+        throw new APIError("NOT_FOUND");
+      }
+
+      if (
         context.path === "/organization/list-invitations" ||
         context.path === "/organization/get-full-organization"
       ) {

@@ -140,56 +140,233 @@ describe("PostgreSQL integration", () => {
     await expect(testPrisma.link.count()).resolves.toBe(before);
   });
 
-  it("commits a concurrent workspace creation or account deletion without an ownerless workspace", async () => {
+  it("serializes workspace creation and account deletion for the same user", async () => {
     const suffix = randomUUID().replaceAll("-", "").slice(0, 12);
     const userId = `lifecycle-user-${suffix}`;
     const slug = `lifecycle-${suffix}`;
     await testPrisma.user.create({
       data: { id: userId, email: `${userId}@example.test`, name: "Lifecycle User" },
     });
-    const lifecycleReadBarrier = new ReadBarrier(2);
+    const creationReadGate = new ReadGate();
     const concurrentPrisma = new PrismaClient({
       adapter: new PrismaPg({ connectionString: container.getConnectionUri() }),
     });
+    const creationTransaction = vi.fn(testPrisma.$transaction.bind(testPrisma));
+    const deletionTransaction = vi.fn(concurrentPrisma.$transaction.bind(concurrentPrisma));
     const workspaceLifecycle = WorkspaceLifecycleService.forTesting({
-      afterRead: () => lifecycleReadBarrier.wait(),
-      database: testPrisma as never,
+      afterRead: () => creationReadGate.wait(),
+      database: { $transaction: creationTransaction } as never,
     });
     const accountDeletion = AccountDeletionService.forTesting({
-      afterRead: () => lifecycleReadBarrier.wait(),
-      database: concurrentPrisma as never,
+      database: { $transaction: deletionTransaction } as never,
     });
 
-    const outcomes = await Promise.allSettled([
+    const operations: Promise<unknown>[] = [
       workspaceLifecycle.create({ name: "Lifecycle Workspace", slug, userId }),
-      accountDeletion.delete({
-        confirmationEmail: `${userId}@example.test`,
-        email: `${userId}@example.test`,
-        userId,
-      }),
-    ]).finally(() => concurrentPrisma.$disconnect());
+    ];
+    try {
+      await creationReadGate.arrived;
+      operations.push(
+        accountDeletion.delete({
+          confirmationEmail: `${userId}@example.test`,
+          email: `${userId}@example.test`,
+          userId,
+        }),
+      );
+      await waitForLifecycleUserLockWaiter(testPrisma);
+      creationReadGate.release();
+      const outcomes = await Promise.allSettled(operations);
 
-    expect(outcomes.filter((outcome) => outcome.status === "fulfilled")).toHaveLength(1);
-    const workspace = await testPrisma.organization.findUnique({ where: { slug } });
-    if (workspace) {
+      const workspace = await testPrisma.organization.findUnique({ where: { slug } });
       expect(outcomes[0]).toMatchObject({ status: "fulfilled" });
       expect(outcomes[1]).toMatchObject({
         reason: expect.any(ConflictException),
         status: "rejected",
       });
+      expect(creationTransaction).toHaveBeenCalledTimes(1);
+      expect(deletionTransaction).toHaveBeenCalledTimes(1);
+      expect(workspace).toBeTruthy();
+      if (!workspace) throw new Error("The created workspace is required.");
       await expect(testPrisma.user.findUnique({ where: { id: userId } })).resolves.toBeTruthy();
       await expect(
         testPrisma.member.count({
           where: { organizationId: workspace.id, role: "owner", userId },
         }),
       ).resolves.toBe(1);
-    } else {
-      expect(outcomes[0]).toMatchObject({
+    } finally {
+      creationReadGate.release();
+      await Promise.allSettled(operations);
+      await concurrentPrisma.$disconnect();
+    }
+  });
+
+  it("rejects workspace creation after account deletion wins the same-user lock", async () => {
+    const suffix = randomUUID().replaceAll("-", "").slice(0, 12);
+    const userId = `deletion-wins-${suffix}`;
+    const slug = `deletion-wins-${suffix}`;
+    await testPrisma.user.create({
+      data: { id: userId, email: `${userId}@example.test`, name: "Deletion Wins User" },
+    });
+
+    const deletionReadGate = new ReadGate();
+    const concurrentPrisma = new PrismaClient({
+      adapter: new PrismaPg({ connectionString: container.getConnectionUri() }),
+    });
+    const deletionTransaction = vi.fn(testPrisma.$transaction.bind(testPrisma));
+    const creationTransaction = vi.fn(concurrentPrisma.$transaction.bind(concurrentPrisma));
+    const accountDeletion = AccountDeletionService.forTesting({
+      afterRead: () => deletionReadGate.wait(),
+      database: { $transaction: deletionTransaction } as never,
+    });
+    const workspaceLifecycle = WorkspaceLifecycleService.forTesting({
+      database: { $transaction: creationTransaction } as never,
+    });
+
+    const operations: Promise<unknown>[] = [
+      accountDeletion.delete({
+        confirmationEmail: `${userId}@example.test`,
+        email: `${userId}@example.test`,
+        userId,
+      }),
+    ];
+    try {
+      await deletionReadGate.arrived;
+      operations.push(
+        workspaceLifecycle.create({
+          name: "Deleted User Workspace",
+          slug,
+          userId,
+        }),
+      );
+      await waitForLifecycleUserLockWaiter(testPrisma);
+      deletionReadGate.release();
+      const outcomes = await Promise.allSettled(operations);
+
+      expect(outcomes[0]).toMatchObject({ status: "fulfilled" });
+      expect(outcomes[1]).toMatchObject({
         reason: expect.any(UnauthorizedException),
         status: "rejected",
       });
-      expect(outcomes[1]).toMatchObject({ status: "fulfilled" });
+      expect(deletionTransaction).toHaveBeenCalledTimes(1);
+      expect(creationTransaction).toHaveBeenCalledTimes(1);
+      await expect(testPrisma.organization.findUnique({ where: { slug } })).resolves.toBeNull();
       await expect(testPrisma.user.findUnique({ where: { id: userId } })).resolves.toBeNull();
+    } finally {
+      deletionReadGate.release();
+      await Promise.allSettled(operations);
+      await concurrentPrisma.$disconnect();
+    }
+  });
+
+  it("lets seven independent users create workspaces without lifecycle retries", async () => {
+    const suffix = randomUUID().replaceAll("-", "").slice(0, 12);
+    const users = Array.from({ length: 7 }, (_, index) => ({
+      email: `concurrent-${suffix}-${index}@example.test`,
+      id: `concurrent-${suffix}-${index}`,
+      name: "Concurrent User",
+    }));
+    await testPrisma.user.createMany({ data: users });
+
+    const readBarrier = new ReadBarrier(users.length);
+    const clients = users.map(
+      () =>
+        new PrismaClient({
+          adapter: new PrismaPg({ connectionString: container.getConnectionUri() }),
+        }),
+    );
+    const transactions = clients.map((client) => vi.fn(client.$transaction.bind(client)));
+    const services = transactions.map((transaction) =>
+      WorkspaceLifecycleService.forTesting({
+        afterRead: () => readBarrier.wait(),
+        database: { $transaction: transaction } as never,
+      }),
+    );
+
+    const outcomes = await Promise.allSettled(
+      services.map((service, index) =>
+        service.create({
+          name: "Concurrent Workspace",
+          slug: `concurrent-${suffix}-${index}`,
+          userId: users[index].id,
+        }),
+      ),
+    ).finally(() => Promise.all(clients.map((client) => client.$disconnect())));
+
+    for (const outcome of outcomes) expect(outcome).toMatchObject({ status: "fulfilled" });
+    for (const transaction of transactions) expect(transaction).toHaveBeenCalledTimes(1);
+    for (const user of users) {
+      await expect(
+        testPrisma.member.count({ where: { role: "owner", userId: user.id } }),
+      ).resolves.toBe(1);
+    }
+  });
+
+  it("does not let concurrent workspace creation exceed the per-user maximum", async () => {
+    const suffix = randomUUID().replaceAll("-", "").slice(0, 12);
+    const userId = `workspace-limit-${suffix}`;
+    await testPrisma.user.create({
+      data: { id: userId, email: `${userId}@example.test`, name: "Workspace Limit User" },
+    });
+    for (const index of [0, 1]) {
+      const organizationId = `workspace-limit-${suffix}-${index}`;
+      await testPrisma.organization.create({
+        data: {
+          id: organizationId,
+          name: "Existing Workspace",
+          slug: `workspace-limit-${suffix}-${index}`,
+        },
+      });
+      await testPrisma.member.create({
+        data: { id: randomUUID(), organizationId, role: "owner", userId },
+      });
+    }
+
+    const creationReadGate = new ReadGate();
+    const concurrentPrisma = new PrismaClient({
+      adapter: new PrismaPg({ connectionString: container.getConnectionUri() }),
+    });
+    const firstTransaction = vi.fn(testPrisma.$transaction.bind(testPrisma));
+    const secondTransaction = vi.fn(concurrentPrisma.$transaction.bind(concurrentPrisma));
+    const firstCreation = WorkspaceLifecycleService.forTesting({
+      afterRead: () => creationReadGate.wait(),
+      database: { $transaction: firstTransaction } as never,
+    });
+    const secondCreation = WorkspaceLifecycleService.forTesting({
+      database: { $transaction: secondTransaction } as never,
+    });
+
+    const operations: Promise<unknown>[] = [
+      firstCreation.create({
+        name: "Third Workspace",
+        slug: `limit3-${suffix}`,
+        userId,
+      }),
+    ];
+    try {
+      await creationReadGate.arrived;
+      operations.push(
+        secondCreation.create({
+          name: "Fourth Workspace",
+          slug: `limit4-${suffix}`,
+          userId,
+        }),
+      );
+      await waitForLifecycleUserLockWaiter(testPrisma);
+      creationReadGate.release();
+      const outcomes = await Promise.allSettled(operations);
+
+      expect(outcomes[0]).toMatchObject({ status: "fulfilled" });
+      expect(outcomes[1]).toMatchObject({
+        reason: expect.any(ConflictException),
+        status: "rejected",
+      });
+      expect(firstTransaction).toHaveBeenCalledTimes(1);
+      expect(secondTransaction).toHaveBeenCalledTimes(1);
+      await expect(testPrisma.member.count({ where: { userId } })).resolves.toBe(3);
+    } finally {
+      creationReadGate.release();
+      await Promise.allSettled(operations);
+      await concurrentPrisma.$disconnect();
     }
   });
 
@@ -697,4 +874,38 @@ class ReadBarrier {
     if (this.arrivals === this.expectedArrivals) this.release();
     await this.released;
   }
+}
+
+class ReadGate {
+  private arrive: () => void = () => undefined;
+  private continue: () => void = () => undefined;
+  readonly arrived = new Promise<void>((resolve) => {
+    this.arrive = resolve;
+  });
+  private readonly released = new Promise<void>((resolve) => {
+    this.continue = resolve;
+  });
+
+  async wait(): Promise<void> {
+    this.arrive();
+    await this.released;
+  }
+
+  release(): void {
+    this.continue();
+  }
+}
+
+async function waitForLifecycleUserLockWaiter(database: PrismaClient): Promise<void> {
+  await vi.waitFor(
+    async () => {
+      const waiters = await database.$queryRaw<{ count: bigint }[]>`
+        SELECT COUNT(*)::bigint AS "count"
+        FROM pg_stat_activity
+        WHERE "wait_event_type" = 'Lock' AND query LIKE '%FOR UPDATE%'
+      `;
+      expect(waiters[0].count).toBeGreaterThan(0n);
+    },
+    { interval: 10, timeout: 4_000 },
+  );
 }

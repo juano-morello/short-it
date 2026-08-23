@@ -48,19 +48,23 @@ browser fragment, are cleared from history before network work, and require an e
 matching-email acceptance. Accepted and cancelled rows are deleted immediately; a five-minute job
 removes expired pending rows and any terminal-row cleanup residue.
 
-The application owns workspace creation at `POST /api/workspaces`. It creates the organization and
-its owner membership in one serializable PostgreSQL transaction, with the authenticated user and
-existing membership count inside that transaction. Better Auth's native organization-create route
-is unavailable. An in-process limit admits 100 authenticated workspace-create attempts per user per
-minute. Better Auth retains the static owner-authorized organization-delete route; the
-dashboard requires the workspace handle before calling it. Account deletion runs its owner check
-and user deletion in its own serializable transaction. The two requests use the same isolation and
-retry policy, so a concurrent workspace creation either commits with its owner or aborts, never
-leaving an ownerless organization.
-The lifecycle transaction retries PostgreSQL serialization and timeout conflicts up to three times
-with bounded jitter. Exhaustion returns a retryable `503` and records a privacy-safe lifecycle event
-with request ID, outcome, and attempt count. The creation response exposes only the workspace ID,
-name, and handle.
+The application owns workspace creation at `POST /api/workspaces`. Workspace creation and account
+deletion each use a short `READ COMMITTED` PostgreSQL transaction that first locks the authenticated
+`User` row with parameterized `SELECT ... FOR UPDATE`. Only after that lock do they read memberships,
+enforce the workspace-limit or ownerless-workspace rule, and write the organization, membership, or
+user deletion. Requests for one user therefore serialize, while requests for unrelated users proceed
+independently. Better Auth's native organization-create route is unavailable. An in-process limit
+admits 100 authenticated workspace-create attempts per user per minute. Better Auth retains the
+static owner-authorized organization-delete route; the dashboard requires the workspace handle
+before calling it. A concurrent workspace creation and account deletion can therefore commit only
+an owned organization or a deleted account.
+Better Auth's native member-role update, leave, and member-removal routes are unavailable while
+ownership and membership mutation remain out of scope, so uncoordinated owner changes cannot bypass
+that lifecycle boundary.
+The lifecycle transaction retries PostgreSQL serialization, adapter-wrapped SQLSTATE `40001`, and
+timeout conflicts up to three times with bounded jitter. Exhaustion returns a retryable `503` and
+records a privacy-safe lifecycle event with request ID, outcome, and attempt count. The creation
+response exposes only the workspace ID, name, and handle.
 Database cascades remove the deleted workspace's scoped records and the deleted account's sessions,
 credentials, and memberships.
 

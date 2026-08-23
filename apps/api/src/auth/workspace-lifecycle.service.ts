@@ -1,10 +1,5 @@
 import { randomUUID } from "node:crypto";
-import {
-  BadRequestException,
-  ConflictException,
-  Injectable,
-  UnauthorizedException,
-} from "@nestjs/common";
+import { BadRequestException, ConflictException, Injectable } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import { prisma } from "../database.js";
 import { getDisplayNameError } from "./display-name.js";
@@ -42,13 +37,8 @@ export class WorkspaceLifecycleService {
     try {
       return await runWorkspaceLifecycleTransaction(
         this.database,
+        input.userId,
         async (transaction) => {
-          const user = await transaction.user.findUnique({
-            select: { id: true },
-            where: { id: input.userId },
-          });
-          if (!user) throw new UnauthorizedException();
-
           const workspaceCount = await transaction.member.count({
             where: { userId: input.userId },
           });

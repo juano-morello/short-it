@@ -11,12 +11,18 @@ const password = "correct-horse-battery-staple";
 
 type SignedInUser = { cookie: string; email: string; id: string };
 type Workspace = { id: string; slug: string };
+type AdditionalOwner = SignedInUser & { memberId: string };
 
 let accountDeletionResponse: Response | undefined;
 let accountUser: SignedInUser | undefined;
 let lifecycleWorkspace: Workspace | undefined;
 let nativeWorkspaceCreationResponse: Response | undefined;
+let nativeMemberRoleUpdateResponse: Response | undefined;
+let nativeLeaveOrganizationResponse: Response | undefined;
+let nativeRemoveMemberResponse: Response | undefined;
 let otherWorkspace: Workspace | undefined;
+let roleUpdateTargetMemberId: string | undefined;
+let additionalOwner: AdditionalOwner | undefined;
 let concurrentWorkspaceCreationResponse: Response | undefined;
 let workspaceDeletionResponse: Response | undefined;
 
@@ -79,6 +85,36 @@ Given("a signed-in workspace owner with a published link", async () => {
       userId: (await createSignedInUser("workspace-member")).id,
     },
   });
+});
+
+Given("a signed-in workspace owner with an editor", async () => {
+  accountUser = await createSignedInUser("role-owner");
+  lifecycleWorkspace = await createWorkspace(accountUser, "role-workspace");
+  const editor = await createSignedInUser("role-editor");
+  const member = await prisma.member.create({
+    data: {
+      id: randomUUID(),
+      organizationId: lifecycleWorkspace.id,
+      role: "editor",
+      userId: editor.id,
+    },
+  });
+  roleUpdateTargetMemberId = member.id;
+});
+
+Given("a signed-in workspace owner with another owner", async () => {
+  accountUser = await createSignedInUser("removal-owner");
+  lifecycleWorkspace = await createWorkspace(accountUser, "removal-workspace");
+  const secondOwner = await createSignedInUser("removal-second-owner");
+  const member = await prisma.member.create({
+    data: {
+      id: randomUUID(),
+      organizationId: lifecycleWorkspace.id,
+      role: "owner",
+      userId: secondOwner.id,
+    },
+  });
+  additionalOwner = { ...secondOwner, memberId: member.id };
 });
 
 When("the owner deletes the workspace", async () => {
@@ -279,6 +315,74 @@ When("the user calls the native workspace creation route", async () => {
 Then("native workspace creation is rejected", async () => {
   assert.ok(nativeWorkspaceCreationResponse, "A native workspace response is required.");
   assert.equal(nativeWorkspaceCreationResponse.status, 404);
+});
+
+When("the owner calls the native member-role update route", async () => {
+  assert.ok(accountUser, "A signed-in owner is required.");
+  assert.ok(lifecycleWorkspace, "A workspace is required.");
+  assert.ok(roleUpdateTargetMemberId, "An editor membership is required.");
+  nativeMemberRoleUpdateResponse = await fetch(
+    `${baseUrl}/api/auth/organization/update-member-role`,
+    {
+      body: JSON.stringify({
+        memberId: roleUpdateTargetMemberId,
+        organizationId: lifecycleWorkspace.id,
+        role: "owner",
+      }),
+      headers: requestHeaders(accountUser),
+      method: "POST",
+    },
+  );
+});
+
+Then("native member-role updates are rejected", async () => {
+  assert.ok(nativeMemberRoleUpdateResponse, "A native member-role response is required.");
+  assert.ok(roleUpdateTargetMemberId, "An editor membership is required.");
+  assert.ok(lifecycleWorkspace, "A workspace is required.");
+  assert.equal(nativeMemberRoleUpdateResponse.status, 404);
+  const editor = await prisma.member.findUnique({ where: { id: roleUpdateTargetMemberId } });
+  assert.equal(editor?.role, "editor");
+  assert.equal(
+    await prisma.member.count({
+      where: { organizationId: lifecycleWorkspace.id, role: { contains: "owner" } },
+    }),
+    1,
+  );
+});
+
+When("both owners concurrently call native membership-removal routes", async () => {
+  assert.ok(accountUser, "A signed-in owner is required.");
+  assert.ok(additionalOwner, "A second owner is required.");
+  assert.ok(lifecycleWorkspace, "A workspace is required.");
+  [nativeRemoveMemberResponse, nativeLeaveOrganizationResponse] = await Promise.all([
+    fetch(`${baseUrl}/api/auth/organization/remove-member`, {
+      body: JSON.stringify({
+        memberIdOrEmail: additionalOwner.memberId,
+        organizationId: lifecycleWorkspace.id,
+      }),
+      headers: requestHeaders(accountUser),
+      method: "POST",
+    }),
+    fetch(`${baseUrl}/api/auth/organization/leave`, {
+      body: JSON.stringify({ organizationId: lifecycleWorkspace.id }),
+      headers: requestHeaders(additionalOwner),
+      method: "POST",
+    }),
+  ]);
+});
+
+Then("native membership removals are rejected and the workspace keeps both owners", async () => {
+  assert.ok(nativeLeaveOrganizationResponse, "A native leave response is required.");
+  assert.ok(nativeRemoveMemberResponse, "A native removal response is required.");
+  assert.ok(lifecycleWorkspace, "A workspace is required.");
+  assert.equal(nativeLeaveOrganizationResponse.status, 404);
+  assert.equal(nativeRemoveMemberResponse.status, 404);
+  assert.equal(
+    await prisma.member.count({
+      where: { organizationId: lifecycleWorkspace.id, role: { contains: "owner" } },
+    }),
+    2,
+  );
 });
 
 async function createSignedInUser(prefix: string): Promise<SignedInUser> {

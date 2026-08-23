@@ -32,6 +32,7 @@ export class AccountDeletionService {
 
     await runWorkspaceLifecycleTransaction(
       this.dependencies.database,
+      input.userId,
       async (transaction) => {
         const memberships = await transaction.member.findMany({
           select: { role: true },

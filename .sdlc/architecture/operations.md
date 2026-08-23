@@ -29,13 +29,18 @@ email addresses, workspace handles, record IDs, cookies, IP addresses, and user 
 production enables deletion, configure a dashboard and alert for deletion failures and an unusual
 rejection rate, retaining these operational logs under the environment's approved log policy.
 
-Workspace creation and account deletion use separate serializable transactions with the same lifecycle
-policy. On a PostgreSQL serialization or positively identified transaction-timeout conflict, each
-retries no more than three times with bounded jitter. The `workspace_lifecycle_transaction` event
-records only request ID, outcome, and attempt count. A `temporarily_unavailable` outcome corresponds
-to a retryable `503`. Before production, chart retrying and temporarily unavailable outcomes, and
-investigate five temporarily unavailable outcomes in five minutes with database saturation and
-lock-wait telemetry. No personal, workspace, or network identifiers belong in this event.
+Workspace creation and account deletion use short `READ COMMITTED` transactions. Each first locks
+the session-derived `User` row with parameterized `SELECT ... FOR UPDATE`, then reads memberships
+and applies its lifecycle write. This serializes same-user creation and deletion without blocking
+unrelated users. PostgreSQL serialization, adapter-wrapped SQLSTATE `40001`, and positively
+identified transaction-timeout conflicts retry no more than three times with bounded jitter. The
+`workspace_lifecycle_transaction` event records only request ID, outcome, and attempt count. A
+`temporarily_unavailable` outcome corresponds to a retryable `503`. Before production, chart
+retrying and temporarily unavailable outcomes, and investigate five temporarily unavailable outcomes
+in five minutes with database saturation and lock-wait telemetry. No personal, workspace, or network
+identifiers belong in this event. Before hosted rollout, the selected PostgreSQL provider must expose
+lock-wait and connection-saturation telemetry. Roll out this lifecycle policy as one API version, or
+otherwise prove mixed-version create/delete behavior before admitting traffic.
 
 The API must emit structured, privacy-safe logs with request IDs. It must not log raw IPs,
 raw user agents, session tokens, invitation URLs, or destination query strings. Product
@@ -121,4 +126,7 @@ backup and restore runbook is tested.
 
 For redirect errors, verify edge host routing, API readiness, and destination policy. For a
 database incident, stop writes, assess last backup, and follow the eventual provider restore
-procedure. Do not use raw analytics data for incident diagnosis.
+procedure. For repeated lifecycle transaction unavailability, compare retry and request-latency
+trends with PostgreSQL lock waits and connection saturation, identify the blocking statement or
+session, and stop or roll back the affected API version if the error rate persists. Do not use raw
+analytics data for incident diagnosis.

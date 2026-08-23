@@ -42,10 +42,12 @@ prerequisites for multi-instance production deployment.
 
 Workspace deletion relies on Better Auth's owner-only organization-delete permission. The dashboard
 requires the workspace handle to reduce accidental deletion. The application disables Better Auth's
-native organization-create route and creates a workspace plus its owner membership in one
-serializable transaction. Account deletion accepts only the authenticated session's matching email,
-checks every membership for an owner role, and deletes the session-derived user record in the same
-transaction boundary. A concurrent create/delete pair can commit only an owned workspace or a
+native organization-create, member-role update, leave, and member-removal routes while ownership
+and membership mutation remain out of scope. Workspace creation and account deletion each lock the
+session-derived `User` row with parameterized `SELECT ... FOR UPDATE` before they inspect
+memberships or apply lifecycle writes. Account deletion accepts only the authenticated session's
+matching email, checks every membership for an owner role, and deletes the session-derived user
+record in that transaction. A concurrent create/delete pair can commit only an owned workspace or a
 deleted account. A caller who owns a workspace receives no deletion. Typed confirmation is an
 accidental-action control, not fresh authentication; a compromised fresh session remains an
 accepted launch risk until stronger reauthentication is added.

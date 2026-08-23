@@ -42,3 +42,13 @@ Feature: Irreversible workspace and account deletion
     Given a signed-in user without a workspace
     When the user calls the native workspace creation route
     Then native workspace creation is rejected
+
+  Scenario: Native member-role updates are unavailable
+    Given a signed-in workspace owner with an editor
+    When the owner calls the native member-role update route
+    Then native member-role updates are rejected
+
+  Scenario: Native membership removal routes cannot orphan a two-owner workspace
+    Given a signed-in workspace owner with another owner
+    When both owners concurrently call native membership-removal routes
+    Then native membership removals are rejected and the workspace keeps both owners
