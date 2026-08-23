@@ -42,6 +42,14 @@ export function canCreateLinks(role: string): boolean {
   });
 }
 
+export function canReadLinks(role: string): boolean {
+  return role.split(",").some((assignedRole) => {
+    const permissions =
+      workspaceRolePermissions[assignedRole as keyof typeof workspaceRolePermissions];
+    return (permissions?.link as readonly string[] | undefined)?.includes("read") ?? false;
+  });
+}
+
 export function canManageInvitations(role: string): boolean {
   return role.split(",").some((assignedRole) => {
     const permissions =

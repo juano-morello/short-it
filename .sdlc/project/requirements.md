@@ -12,6 +12,7 @@
 | FR-006 | Owner, editor, and analyst permissions restrict workspace behavior. | Cross-tenant and authorization tests. | delivered |
 | FR-007 | A workspace owner can irreversibly delete the workspace; an account can delete itself after resolving owned workspaces. | Lifecycle BDD scenarios. | delivered |
 | FR-008 | The API exposes unauthenticated `/api/health` and `/api/ready` probes. | Unit and BDD probe tests. | delivered |
+| FR-009 | Workspace members can browse published links in a routed dashboard, while only owners and editors can publish them. | Scoped API, BDD, dashboard, and browser tests. | ready for review |
 
 ## Nonfunctional
 

@@ -10,6 +10,162 @@ import { LinksService } from "./links.service.js";
 import { LinkPublicationRateLimiter } from "./publication-policy.js";
 
 describe("LinksService", () => {
+  it("returns the newest workspace links to an analyst without crossing tenant boundaries", async () => {
+    const database = createDatabase({ organizationId: "workspace-a", role: "analyst" });
+    database.link.findMany.mockResolvedValue([
+      {
+        createdAt: new Date("2026-08-22T12:00:00.000Z"),
+        destinationUrl: "https://example.com/newest",
+        id: "link-2",
+        publishedAt: new Date("2026-08-22T12:00:00.000Z"),
+        slug: "cnewest",
+      },
+      {
+        createdAt: new Date("2026-08-21T12:00:00.000Z"),
+        destinationUrl: "https://example.com/older",
+        id: "link-1",
+        publishedAt: new Date("2026-08-21T12:00:00.000Z"),
+        slug: "colder",
+      },
+    ]);
+
+    await expect(
+      LinksService.forTesting({ database: database as never }).list({
+        requestedOrganizationId: "workspace-a",
+        userId: "member-1",
+      }),
+    ).resolves.toEqual({
+      links: [
+        expect.objectContaining({ id: "link-2", slug: "cnewest" }),
+        expect.objectContaining({ id: "link-1", slug: "colder" }),
+      ],
+      nextCursor: undefined,
+    });
+
+    expect(database.member.findUnique).toHaveBeenCalledWith({
+      where: {
+        organizationId_userId: { organizationId: "workspace-a", userId: "member-1" },
+      },
+    });
+    expect(database.link.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+        where: { organizationId: "workspace-a", publishedAt: { not: null } },
+      }),
+    );
+  });
+
+  it("returns a cursor only when more workspace links are available", async () => {
+    const database = createDatabase({ organizationId: "workspace-a", role: "editor" });
+    database.link.findMany.mockResolvedValue(
+      Array.from({ length: 51 }, (_, index) => ({
+        createdAt: new Date("2026-08-22T12:00:00.000Z"),
+        destinationUrl: `https://example.com/${index}`,
+        id: `link-${index}`,
+        publishedAt: new Date("2026-08-22T12:00:00.000Z"),
+        slug: `c${index}`,
+      })),
+    );
+
+    const result = await LinksService.forTesting({ database: database as never }).list({
+      cursor: "cabcdefghijklmnopqrstuvwx",
+      requestedOrganizationId: "workspace-a",
+      userId: "member-1",
+    });
+
+    expect(result.nextCursor).toBe("link-49");
+    expect(result.links).toHaveLength(50);
+
+    expect(database.link.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        cursor: {
+          organizationId_id: {
+            id: "cabcdefghijklmnopqrstuvwx",
+            organizationId: "workspace-a",
+          },
+        },
+        skip: 1,
+        take: 51,
+      }),
+    );
+  });
+
+  it("rejects a cursor that does not belong to the requested workspace", async () => {
+    const database = createDatabase({ organizationId: "workspace-a", role: "analyst" });
+    database.link.findUnique.mockResolvedValue(undefined);
+
+    await expect(
+      LinksService.forTesting({ database: database as never }).list({
+        cursor: "cabcdefghijklmnopqrstuvwx",
+        requestedOrganizationId: "workspace-a",
+        userId: "member-1",
+      }),
+    ).rejects.toEqual(new BadRequestException("The link page cursor is invalid."));
+
+    expect(database.link.findUnique).toHaveBeenCalledWith({
+      select: { id: true },
+      where: {
+        organizationId_id: {
+          id: "cabcdefghijklmnopqrstuvwx",
+          organizationId: "workspace-a",
+        },
+      },
+    });
+    expect(database.link.findMany).not.toHaveBeenCalled();
+  });
+
+  it("rejects a malformed page cursor before querying links", async () => {
+    const database = createDatabase({ organizationId: "workspace-a", role: "analyst" });
+
+    await expect(
+      LinksService.forTesting({ database: database as never }).list({
+        cursor: "not-a-cuid",
+        requestedOrganizationId: "workspace-a",
+        userId: "member-1",
+      }),
+    ).rejects.toEqual(new BadRequestException("The link page cursor is invalid."));
+
+    expect(database.link.findUnique).not.toHaveBeenCalled();
+    expect(database.link.findMany).not.toHaveBeenCalled();
+  });
+
+  it("does not return a cursor when the first page has exactly 50 links", async () => {
+    const database = createDatabase({ organizationId: "workspace-a", role: "analyst" });
+    database.link.findMany.mockResolvedValue(
+      Array.from({ length: 50 }, (_, index) => ({
+        createdAt: new Date("2026-08-22T12:00:00.000Z"),
+        destinationUrl: `https://example.com/${index}`,
+        id: `link-${index}`,
+        publishedAt: new Date("2026-08-22T12:00:00.000Z"),
+        slug: `c${index}`,
+      })),
+    );
+
+    await expect(
+      LinksService.forTesting({ database: database as never }).list({
+        requestedOrganizationId: "workspace-a",
+        userId: "member-1",
+      }),
+    ).resolves.toMatchObject({
+      links: expect.arrayContaining([expect.objectContaining({ id: "link-49" })]),
+      nextCursor: undefined,
+    });
+  });
+
+  it("does not let a non-member browse links", async () => {
+    const database = createDatabase(undefined);
+
+    await expect(
+      LinksService.forTesting({ database: database as never }).list({
+        requestedOrganizationId: "workspace-a",
+        userId: "member-1",
+      }),
+    ).rejects.toEqual(
+      new ForbiddenException("You do not have permission to view links in this workspace."),
+    );
+    expect(database.link.findMany).not.toHaveBeenCalled();
+  });
+
   it("persists an immediately published link in the membership-derived workspace", async () => {
     const database = createDatabase({ organizationId: "requested-workspace", role: "editor" });
     database.link.create.mockResolvedValue({
@@ -303,7 +459,12 @@ describe("LinksService", () => {
 
 function createDatabase(member: { organizationId: string; role: string } | undefined) {
   return {
-    link: { count: vi.fn().mockResolvedValue(0), create: vi.fn() },
+    link: {
+      count: vi.fn().mockResolvedValue(0),
+      create: vi.fn(),
+      findMany: vi.fn(),
+      findUnique: vi.fn().mockResolvedValue({ id: "cursor" }),
+    },
     member: { findUnique: vi.fn().mockResolvedValue(member) },
   };
 }

@@ -15,8 +15,10 @@ type WorkspaceMember = {
 };
 
 let publishedLinkResponse: Response | undefined;
+let linkListResponse: Response | undefined;
 let workspaceMember: WorkspaceMember | undefined;
 let workspaceOwner: WorkspaceMember | undefined;
+let separateLinkId: string | undefined;
 let separateWorkspaceId: string | undefined;
 
 Given("a signed-in workspace owner", async () => {
@@ -36,6 +38,15 @@ Given("a signed-in workspace analyst", async () => {
 
 Given("a separate workspace exists", async () => {
   separateWorkspaceId = (await createWorkspaceOwner()).workspaceId;
+  const separateLink = await prisma.link.create({
+    data: {
+      destinationUrl: "https://93.184.216.34/separate-workspace",
+      organizationId: separateWorkspaceId,
+      publishedAt: new Date(),
+      slug: `c${randomUUID().replaceAll("-", "").slice(0, 24)}`,
+    },
+  });
+  separateLinkId = separateLink.id;
 });
 
 When("an unauthenticated visitor attempts to publish a link", async () => {
@@ -96,6 +107,31 @@ When("the analyst attempts to publish a link", async () => {
   );
 });
 
+When("the analyst browses published links", async () => {
+  assert.ok(workspaceMember, "A signed-in workspace analyst is required.");
+  await prisma.link.create({
+    data: {
+      destinationUrl: "https://93.184.216.34/browse",
+      organizationId: workspaceMember.workspaceId,
+      publishedAt: new Date(),
+      slug: `c${randomUUID().replaceAll("-", "").slice(0, 24)}`,
+    },
+  });
+  linkListResponse = await fetch(
+    `${baseUrl}/api/links?organizationId=${encodeURIComponent(workspaceMember.workspaceId)}`,
+    { headers: { cookie: workspaceMember.cookie, ...dashboardHostHeader } },
+  );
+});
+
+When("the analyst browses links using the separate workspace cursor", async () => {
+  assert.ok(workspaceMember, "A signed-in workspace analyst is required.");
+  assert.ok(separateLinkId, "A separate workspace link is required.");
+  linkListResponse = await fetch(
+    `${baseUrl}/api/links?organizationId=${encodeURIComponent(workspaceMember.workspaceId)}&cursor=${encodeURIComponent(separateLinkId)}`,
+    { headers: { cookie: workspaceMember.cookie, ...dashboardHostHeader } },
+  );
+});
+
 When("the editor attempts to publish a link in the separate workspace", async () => {
   assert.ok(workspaceMember, "A signed-in workspace editor is required.");
   assert.ok(separateWorkspaceId, "A separate workspace is required.");
@@ -146,6 +182,31 @@ Then("the link publication is rejected as unauthenticated", () => {
 Then("the link publication is rejected as forbidden", () => {
   assert.ok(publishedLinkResponse, "A link publication response is required.");
   assert.equal(publishedLinkResponse.status, 403);
+});
+
+Then("the link browser returns only that workspace's links", async () => {
+  assert.ok(linkListResponse, "A link browser response is required.");
+  assert.equal(linkListResponse.status, 200);
+  const body = (await linkListResponse.json()) as {
+    links?: Array<{ destinationUrl?: string; id?: string }>;
+    nextCursor?: string;
+  };
+  assert.equal(body.links?.length, 1);
+  assert.equal(body.links?.[0]?.destinationUrl, "https://93.184.216.34/browse");
+  assert.ok(
+    body.links?.every((link) => link.id !== separateLinkId),
+    "Expected the separate workspace link to be excluded.",
+  );
+  assert.ok(
+    body.links?.every((link) => link.destinationUrl !== "https://93.184.216.34/separate-workspace"),
+    "Expected the separate workspace destination to be excluded.",
+  );
+  assert.equal(body.nextCursor, undefined);
+});
+
+Then("the link browser rejects the foreign link cursor", () => {
+  assert.ok(linkListResponse, "A link browser response is required.");
+  assert.equal(linkListResponse.status, 400);
 });
 
 Then("the link publication is rejected as cross-origin", () => {

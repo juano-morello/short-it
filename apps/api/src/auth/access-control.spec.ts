@@ -3,6 +3,7 @@ import {
   canCreateLinks,
   canManageInvitations,
   canReadAnalytics,
+  canReadLinks,
   workspaceRoles,
 } from "./access-control.js";
 
@@ -30,6 +31,14 @@ describe("workspace roles", () => {
 
   it("denies unknown roles analytics access", () => {
     expect(canReadAnalytics("unknown")).toBe(false);
+  });
+
+  it.each(["owner", "editor", "analyst", "analyst,editor"])("allows %s to browse links", (role) => {
+    expect(canReadLinks(role)).toBe(true);
+  });
+
+  it("denies unknown roles link browsing", () => {
+    expect(canReadLinks("unknown")).toBe(false);
   });
 
   it.each([

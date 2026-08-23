@@ -5,7 +5,7 @@ import {
   Injectable,
 } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
-import { canCreateLinks } from "../auth/access-control.js";
+import { canCreateLinks, canReadLinks } from "../auth/access-control.js";
 import { prisma } from "../database.js";
 import { assertSafeDestinationUrl } from "./destination-policy.js";
 import {
@@ -17,10 +17,18 @@ import {
 
 type LinkDatabase = Pick<typeof prisma, "link" | "member">;
 
+const LINK_PAGE_SIZE = 50;
+
 type CreateLinkInput = {
   destinationUrl: unknown;
   requestedOrganizationId: unknown;
   requestId?: string;
+  userId: string;
+};
+
+type ListLinksInput = {
+  cursor?: unknown;
+  requestedOrganizationId: unknown;
   userId: string;
 };
 
@@ -108,11 +116,78 @@ export class LinksService {
       }
     });
   }
+
+  async list(input: ListLinksInput) {
+    const { database } = this.dependencies;
+    const requestedOrganizationId = assertOrganizationId(input.requestedOrganizationId);
+    const membership = await database.member.findUnique({
+      where: {
+        organizationId_userId: {
+          organizationId: requestedOrganizationId,
+          userId: input.userId,
+        },
+      },
+    });
+
+    if (!membership || !canReadLinks(membership.role)) {
+      throw new ForbiddenException("You do not have permission to view links in this workspace.");
+    }
+
+    const cursor = parseCursor(input.cursor);
+    if (cursor) {
+      const scopedCursor = await database.link.findUnique({
+        select: { id: true },
+        where: {
+          organizationId_id: {
+            id: cursor,
+            organizationId: membership.organizationId,
+          },
+        },
+      });
+      if (!scopedCursor) {
+        throw new BadRequestException("The link page cursor is invalid.");
+      }
+    }
+    const rows = await database.link.findMany({
+      ...(cursor
+        ? {
+            cursor: {
+              organizationId_id: { id: cursor, organizationId: membership.organizationId },
+            },
+            skip: 1,
+          }
+        : {}),
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      select: {
+        createdAt: true,
+        destinationUrl: true,
+        id: true,
+        publishedAt: true,
+        slug: true,
+      },
+      take: LINK_PAGE_SIZE + 1,
+      where: { organizationId: membership.organizationId, publishedAt: { not: null } },
+    });
+    const links = rows.slice(0, LINK_PAGE_SIZE);
+
+    return {
+      links,
+      nextCursor: rows.length > LINK_PAGE_SIZE ? links.at(-1)?.id : undefined,
+    };
+  }
 }
 
 function assertOrganizationId(value: unknown): string {
   if (typeof value !== "string" || !value.trim()) {
     throw new BadRequestException("A workspace is required.");
+  }
+  return value;
+}
+
+function parseCursor(value: unknown): string | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== "string" || !/^c[a-z0-9]{24}$/.test(value)) {
+    throw new BadRequestException("The link page cursor is invalid.");
   }
   return value;
 }

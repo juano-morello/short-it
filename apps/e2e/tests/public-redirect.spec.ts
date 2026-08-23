@@ -21,7 +21,10 @@ test("a tenant host exposes only a query-free public redirect", async ({ page })
   await page.getByRole("button", { name: "Publish link" }).click();
 
   const linkText = await page
-    .getByText(new RegExp(`${workspaceHandle}/c[a-z0-9]{24}`))
+    .getByRole("link", {
+      name: new RegExp(`http://${workspaceHandle}\\.localhost:8080/c[a-z0-9]{24}`),
+    })
+    .first()
     .textContent();
   const slug = linkText?.match(/c[a-z0-9]{24}/)?.[0];
   expect(slug).toBeTruthy();

@@ -249,6 +249,109 @@ a:focus-visible {
   font-size: var(--text-mono-sm);
 }
 
+.dashboard-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  margin-top: var(--space-8);
+  border-bottom: var(--border-width) solid var(--color-border-strong);
+}
+
+.dashboard-tabs a {
+  padding: var(--space-3) 0;
+  color: var(--color-muted);
+  font-family: var(--font-mono);
+  font-size: var(--text-mono-sm);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-mono-ui);
+  text-decoration: none;
+  text-transform: uppercase;
+}
+
+.dashboard-tabs a[aria-current="page"] {
+  color: var(--color-foreground);
+  border-bottom: var(--border-width-strong) solid var(--color-foreground);
+}
+
+.dashboard-section {
+  margin-top: var(--space-10);
+}
+
+.dashboard-heading {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  align-items: end;
+  justify-content: space-between;
+}
+
+.dashboard-heading h2 {
+  margin-top: var(--space-2);
+  font-family: var(--font-display);
+  font-size: var(--text-h2);
+  font-weight: var(--weight-bold);
+  letter-spacing: var(--tracking-h2);
+}
+
+.dashboard-heading > p,
+.dashboard-status,
+.link-list time {
+  color: var(--color-muted);
+  font-size: var(--text-body-sm);
+}
+
+.dashboard-status {
+  display: grid;
+  gap: var(--space-4);
+  margin-top: var(--space-8);
+}
+
+.link-list {
+  display: grid;
+  gap: var(--space-5);
+  margin-top: var(--space-8);
+}
+
+.link-list ul {
+  display: grid;
+  border-top: var(--border-width) solid var(--color-border-strong);
+}
+
+.link-list li {
+  display: flex;
+  gap: var(--space-5);
+  align-items: start;
+  justify-content: space-between;
+  padding: var(--space-5) 0;
+  border-bottom: var(--border-width) solid var(--color-border-strong);
+}
+
+.link-list li > div {
+  min-width: 0;
+}
+
+.link-list li a {
+  overflow-wrap: anywhere;
+  font-family: var(--font-mono);
+  font-size: var(--text-mono-sm);
+  font-weight: var(--weight-semibold);
+}
+
+.link-list li p {
+  margin-top: var(--space-2);
+  overflow-wrap: anywhere;
+}
+
+.link-list time {
+  display: block;
+  margin-top: var(--space-2);
+}
+
+.copy-status {
+  font-family: var(--font-mono);
+  font-size: var(--text-mono-sm);
+}
+
 .analytics-panel {
   display: grid;
   gap: var(--space-6);

@@ -7,17 +7,46 @@ export type PublishedLink = {
   slug: string;
 };
 
+export type WorkspaceLink = Omit<PublishedLink, "organizationId">;
+
+export type LinkPage = {
+  links: WorkspaceLink[];
+  nextCursor?: string;
+};
+
 type CreateLinkRequest = {
   destinationUrl: string;
   organizationId: string;
 };
 
-type GatewayResult =
-  | { data: PublishedLink; error?: undefined }
-  | { data?: undefined; error: string };
+type ListLinksRequest = {
+  cursor?: string;
+  organizationId: string;
+};
+
+type GatewayResult<T> = { data: T; error?: undefined } | { data?: undefined; error: string };
 
 export const linkGateway = {
-  async publish(input: CreateLinkRequest): Promise<GatewayResult> {
+  async list(input: ListLinksRequest): Promise<GatewayResult<LinkPage>> {
+    try {
+      const search = new URLSearchParams({ organizationId: input.organizationId });
+      if (input.cursor) search.set("cursor", input.cursor);
+      const response = await fetch(`/api/links?${search.toString()}`, {
+        credentials: "same-origin",
+      });
+      const body = (await response.json()) as LinkPage | { message?: string };
+
+      if (!response.ok) {
+        return { error: "We couldn't load links right now. Please try again." };
+      }
+
+      return { data: body as LinkPage };
+    } catch {
+      return { error: "We couldn't load links right now. Please try again." };
+    }
+  },
+
+  async publish(input: CreateLinkRequest): Promise<GatewayResult<PublishedLink>> {
     try {
       const response = await fetch("/api/links", {
         body: JSON.stringify(input),

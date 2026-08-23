@@ -34,6 +34,7 @@ test("an owner grants an editor role through a copied invitation link", async ({
     await page.getByRole("button", { name: "Create workspace" }).click();
     await expect(page.getByRole("heading", { name: "Invitation Workspace" })).toBeVisible();
 
+    await page.getByRole("link", { exact: true, name: "Settings" }).click();
     await page.getByLabel("Invitation email").fill(recipientEmail);
     await page.getByRole("button", { name: "Create invitation" }).click();
     const invitationLink = await page.getByLabel("Invitation link").inputValue();

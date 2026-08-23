@@ -25,6 +25,20 @@ Feature: Workspace link publication
     When the analyst attempts to publish a link
     Then the link publication is rejected as forbidden
 
+  @link-browsing
+  Scenario: An analyst can browse only their workspace links
+    Given a signed-in workspace analyst
+    And a separate workspace exists
+    When the analyst browses published links
+    Then the link browser returns only that workspace's links
+
+  @link-browsing
+  Scenario: An analyst cannot use another workspace's link as a page cursor
+    Given a signed-in workspace analyst
+    And a separate workspace exists
+    When the analyst browses links using the separate workspace cursor
+    Then the link browser rejects the foreign link cursor
+
   Scenario: A workspace member cannot publish in another workspace
     Given a signed-in workspace editor
     And a separate workspace exists

@@ -7,6 +7,7 @@ test("an owner deletes a workspace after confirming its handle", async ({ page }
   const email = `owner-${suffix}@example.test`;
 
   await createWorkspace(page, email, "Deletion Owner", handle);
+  await page.getByRole("link", { exact: true, name: "Settings" }).click();
 
   await page.getByLabel("Confirm workspace handle").fill("wrong");
   await page.getByRole("button", { name: "Delete workspace permanently" }).click();
@@ -37,6 +38,7 @@ test("a non-owner deletes their account after confirming their email", async ({
 
     const ownerEmail = `delete-owner-${suffix}@example.test`;
     await createWorkspace(page, ownerEmail, "Deletion Owner", `account${suffix}`);
+    await page.getByRole("link", { exact: true, name: "Settings" }).click();
     await page.getByLabel("Invitation email").fill(recipientEmail);
     await page.getByRole("button", { name: "Create invitation" }).click();
     const invitationLink = await page.getByLabel("Invitation link").inputValue();
@@ -45,6 +47,7 @@ test("a non-owner deletes their account after confirming their email", async ({
     await recipientPage.getByRole("button", { name: "Accept invitation" }).click();
     await expect(recipientPage.getByText("Editor", { exact: true })).toBeVisible();
 
+    await recipientPage.getByRole("link", { exact: true, name: "Settings" }).click();
     await recipientPage.getByLabel("Confirm account email").fill(recipientEmail);
     await recipientPage.getByRole("button", { name: "Delete account permanently" }).click();
 

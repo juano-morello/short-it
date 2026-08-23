@@ -21,7 +21,10 @@ test("a workspace member sees privacy-preserving redirect aggregates", async ({ 
   await page.getByRole("button", { name: "Publish link" }).click();
 
   const linkText = await page
-    .getByText(new RegExp(`${workspaceHandle}/c[a-z0-9]{24}`))
+    .getByRole("link", {
+      name: new RegExp(`http://${workspaceHandle}\\.localhost:8080/c[a-z0-9]{24}`),
+    })
+    .first()
     .textContent();
   const slug = linkText?.match(/c[a-z0-9]{24}/)?.[0];
   expect(slug).toBeTruthy();
@@ -49,6 +52,7 @@ test("a workspace member sees privacy-preserving redirect aggregates", async ({ 
     })
     .toBe(true);
 
+  await page.getByRole("link", { exact: true, name: "Analytics" }).click();
   await expect(page.getByRole("heading", { name: "Redirect performance" })).toBeVisible();
   await expect(page.getByText("TOTAL CLICKS")).toBeVisible();
   await expect(page.getByText("DAILY UNIQUE LINK VISITORS", { exact: true })).toBeVisible();
