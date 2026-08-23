@@ -14,7 +14,7 @@ import { LinksController } from "./links.controller.js";
 
 describe("LinksController", () => {
   const originalNodeEnv = process.env.NODE_ENV;
-  const linksService = { create: vi.fn() };
+  const linksService = { create: vi.fn(), list: vi.fn() };
 
   beforeEach(() => {
     process.env.NODE_ENV = "development";
@@ -59,6 +59,24 @@ describe("LinksController", () => {
         requestFrom("http://app.localhost:8080"),
       ),
     ).rejects.toEqual(new UnauthorizedException());
+  });
+
+  it("passes a signed-in member's selected workspace and cursor to the link browser", async () => {
+    vi.mocked(auth.api.getSession).mockResolvedValue({ user: { id: "member-1" } } as never);
+    linksService.list.mockResolvedValue({ links: [], nextCursor: undefined });
+
+    await expect(
+      new LinksController(linksService as never).list(
+        { cursor: "link-49", organizationId: "workspace-1" },
+        requestFrom(),
+      ),
+    ).resolves.toEqual({ links: [], nextCursor: undefined });
+
+    expect(linksService.list).toHaveBeenCalledWith({
+      cursor: "link-49",
+      requestedOrganizationId: "workspace-1",
+      userId: "member-1",
+    });
   });
 
   it("treats a null body as a validation error instead of dereferencing it", async () => {

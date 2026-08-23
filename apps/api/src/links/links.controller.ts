@@ -2,8 +2,10 @@ import {
   Body,
   Controller,
   ForbiddenException,
+  Get,
   Inject,
   Post,
+  Query,
   Req,
   UnauthorizedException,
 } from "@nestjs/common";
@@ -15,6 +17,11 @@ import { LinksService } from "./links.service.js";
 
 type CreateLinkBody = {
   destinationUrl?: unknown;
+  organizationId?: unknown;
+};
+
+type ListLinksQuery = {
+  cursor?: unknown;
   organizationId?: unknown;
 };
 
@@ -34,6 +41,20 @@ export class LinksController {
       destinationUrl: body?.destinationUrl,
       requestedOrganizationId: body?.organizationId,
       requestId: getRequestId(request),
+      userId: session.user.id,
+    });
+  }
+
+  @Get()
+  async list(@Query() query: ListLinksQuery | null | undefined, @Req() request: Request) {
+    const session = await auth.api.getSession({ headers: toHeaders(request.headers) });
+    if (!session) {
+      throw new UnauthorizedException();
+    }
+
+    return this.linksService.list({
+      cursor: query?.cursor,
+      requestedOrganizationId: query?.organizationId,
       userId: session.user.id,
     });
   }

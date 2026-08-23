@@ -11,6 +11,7 @@
     "test:integration": "vitest run --config vitest.integration.config.ts",
     "bdd": "node scripts/run-bdd.mjs default",
     "bdd:analytics": "node scripts/run-bdd.mjs analytics",
+    "bdd:link-browsing": "node scripts/run-bdd.mjs link-browsing",
     "bdd:invitations": "node scripts/run-bdd.mjs invitations",
     "bdd:invitation-edge": "node scripts/run-bdd.mjs invitation-edge",
     "bdd:publication-guardrails": "node scripts/run-bdd.mjs publication-guardrails",

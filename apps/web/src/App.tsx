@@ -1,7 +1,7 @@
 import { type FormEvent, type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { type AnalyticsOverview, analyticsGateway } from "./analytics-gateway.js";
 import { MetricCard } from "./components/MetricCard.js";
-import { linkGateway, type PublishedLink } from "./link-gateway.js";
+import { linkGateway, type PublishedLink, type WorkspaceLink } from "./link-gateway.js";
 import { workspaceGateway } from "./workspace-gateway.js";
 
 type Screen =
@@ -24,6 +24,7 @@ type Workspace = {
 type WorkspaceRole = string;
 type PendingInvitation = { email: string; id: string; role: "analyst" | "editor" };
 type InvitationListState = "idle" | "loaded" | "loading" | "error";
+type DashboardRoute = "analytics" | "links" | "settings";
 
 const initialForm = {
   email: "",
@@ -42,6 +43,16 @@ const accountCreationErrorMessage =
   "We couldn't create your account. Check your details and try again.";
 const signInErrorMessage = "We couldn't sign you in. Check your details and try again.";
 
+function getDashboardRoute(pathname = window.location.pathname): DashboardRoute {
+  if (pathname === "/analytics") return "analytics";
+  if (pathname === "/settings") return "settings";
+  return "links";
+}
+
+function dashboardPath(route: DashboardRoute): string {
+  return route === "links" ? "/links" : `/${route}`;
+}
+
 export function App() {
   const [error, setError] = useState<string>();
   const [analyticsError, setAnalyticsError] = useState<string>();
@@ -55,15 +66,27 @@ export function App() {
   const [isLoading, setIsLoading] = useState(true);
   const [isInvitationSubmitting, setIsInvitationSubmitting] = useState(false);
   const [isDeletionSubmitting, setIsDeletionSubmitting] = useState(false);
+  const [isLinksLoading, setIsLinksLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const acceptedInvitationOrganizationId = useRef<string | undefined>(undefined);
+  const linksRequestVersion = useRef(0);
   const pendingInvitationId = useRef<string | undefined>(undefined);
   const [invitations, setInvitations] = useState<PendingInvitation[]>([]);
   const [invitationLink, setInvitationLink] = useState<string>();
+  const [links, setLinks] = useState<WorkspaceLink[]>([]);
+  const [linksError, setLinksError] = useState<string>();
+  const [nextLinkCursor, setNextLinkCursor] = useState<string>();
   const [publishedLink, setPublishedLink] = useState<PublishedLink>();
+  const [dashboardRoute, setDashboardRoute] = useState<DashboardRoute>(getDashboardRoute);
   const [screen, setScreen] = useState<Screen>("landing");
   const [workspace, setWorkspace] = useState<Workspace>();
   const [workspaceRole, setWorkspaceRole] = useState<WorkspaceRole>();
+
+  const navigateDashboard = useCallback((route: DashboardRoute, replace = false): void => {
+    const pathname = dashboardPath(route);
+    window.history[replace ? "replaceState" : "pushState"](null, "", pathname);
+    setDashboardRoute(route);
+  }, []);
 
   const loadExistingSession = useCallback(
     async (invitationToAccept?: string): Promise<SessionState> => {
@@ -138,6 +161,9 @@ export function App() {
         setWorkspace(firstWorkspace);
         setWorkspaceRole(membershipResult.data.role as WorkspaceRole);
         acceptedInvitationOrganizationId.current = undefined;
+        if (!["/links", "/analytics", "/settings"].includes(window.location.pathname)) {
+          navigateDashboard("links", true);
+        }
         setScreen("dashboard");
         return "dashboard";
       } catch {
@@ -148,7 +174,7 @@ export function App() {
         setIsLoading(false);
       }
     },
-    [],
+    [navigateDashboard],
   );
 
   useEffect(() => {
@@ -162,6 +188,12 @@ export function App() {
     window.addEventListener("hashchange", acceptInvitationFromHash);
     return () => window.removeEventListener("hashchange", acceptInvitationFromHash);
   }, [loadExistingSession]);
+
+  useEffect(() => {
+    const updateDashboardRoute = (): void => setDashboardRoute(getDashboardRoute());
+    window.addEventListener("popstate", updateDashboardRoute);
+    return () => window.removeEventListener("popstate", updateDashboardRoute);
+  }, []);
 
   useEffect(() => {
     if (!workspace) return;
@@ -179,6 +211,32 @@ export function App() {
       isCurrent = false;
     };
   }, [workspace]);
+
+  const loadLinks = useCallback(
+    async (cursor?: string, append = false): Promise<void> => {
+      if (!workspace) return;
+      const requestVersion = ++linksRequestVersion.current;
+      setLinksError(undefined);
+      setIsLinksLoading(true);
+      const result = await linkGateway.list({
+        ...(cursor ? { cursor } : {}),
+        organizationId: workspace.id,
+      });
+      if (requestVersion !== linksRequestVersion.current) return;
+      if (result.error || !result.data) {
+        setLinksError(result.error ?? "We couldn't load links right now. Please try again.");
+      } else {
+        setLinks((current) => (append ? [...current, ...result.data.links] : result.data.links));
+        setNextLinkCursor(result.data.nextCursor);
+      }
+      setIsLinksLoading(false);
+    },
+    [workspace],
+  );
+
+  useEffect(() => {
+    void loadLinks();
+  }, [loadLinks]);
 
   const loadInvitations = useCallback((): void => {
     if (!workspace || !workspaceRole?.split(",").includes("owner")) return;
@@ -236,6 +294,7 @@ export function App() {
     setWorkspace(workspaceResult.data);
     setWorkspaceRole("owner");
     setError(undefined);
+    navigateDashboard("links", true);
     setScreen("dashboard");
     return true;
   }
@@ -333,11 +392,15 @@ export function App() {
       organizationId: workspace.id,
     });
 
-    if (result.error) {
-      setError(result.error);
+    if (!result.data) {
+      setError(result.error ?? "We couldn't publish your link. Please try again.");
     } else {
-      setPublishedLink(result.data);
+      const published = result.data;
+      linksRequestVersion.current += 1;
+      setPublishedLink(published);
+      setLinks((current) => [published, ...current.filter((link) => link.id !== published.id)]);
       updateForm("destinationUrl", "");
+      void loadLinks();
     }
     setIsSubmitting(false);
   }
@@ -429,24 +492,32 @@ export function App() {
   if (screen === "dashboard" && workspace && workspaceRole) {
     return (
       <Dashboard
+        activeRoute={dashboardRoute}
         error={error}
         analyticsError={analyticsError}
         analyticsOverview={analyticsOverview}
         accountEmail={accountEmail}
         isAnalyticsLoading={isAnalyticsLoading}
+        isLinksLoading={isLinksLoading}
         isSubmitting={isSubmitting}
         onPublish={handleLinkPublication}
         onCancelInvitation={handleInvitationCancellation}
         onDeleteAccount={handleAccountDeletion}
         onDeleteWorkspace={handleWorkspaceDeletion}
         onCreateInvitation={handleInvitation}
+        onLoadMoreLinks={() => void loadLinks(nextLinkCursor, true)}
         onUpdateDestination={(value) => updateForm("destinationUrl", value)}
+        onNavigate={(route) => navigateDashboard(route)}
+        onRetryLinks={() => void loadLinks()}
         publishedLink={publishedLink}
         invitationLink={invitationLink}
         invitationActionError={invitationActionError}
         invitationListError={invitationListError}
         invitationListState={invitationListState}
         invitations={invitations}
+        links={links}
+        linksError={linksError}
+        nextLinkCursor={nextLinkCursor}
         isInvitationSubmitting={isInvitationSubmitting}
         isDeletionSubmitting={isDeletionSubmitting}
         onRetryInvitationList={loadInvitations}
@@ -660,12 +731,14 @@ function AuthLayout({ children, title }: { children: ReactNode; title: string })
 }
 
 function Dashboard({
+  activeRoute,
   accountEmail,
   analyticsError,
   analyticsOverview,
   error,
   isAnalyticsLoading,
   isDeletionSubmitting,
+  isLinksLoading,
   invitationActionError,
   invitationListError,
   invitationListState,
@@ -673,24 +746,32 @@ function Dashboard({
   isInvitationSubmitting,
   invitationLink,
   invitations,
+  links,
+  linksError,
+  nextLinkCursor,
   onCancelInvitation,
   onDeleteAccount,
   onDeleteWorkspace,
   onCreateInvitation,
+  onLoadMoreLinks,
+  onNavigate,
   onPublish,
   onRetryInvitationList,
+  onRetryLinks,
   onUpdateDestination,
   publishedLink,
   role,
   value,
   workspace,
 }: {
+  activeRoute: DashboardRoute;
   accountEmail: string | undefined;
   analyticsError: string | undefined;
   analyticsOverview: AnalyticsOverview | undefined;
   error: string | undefined;
   isAnalyticsLoading: boolean;
   isDeletionSubmitting: boolean;
+  isLinksLoading: boolean;
   isSubmitting: boolean;
   isInvitationSubmitting: boolean;
   invitationLink: string | undefined;
@@ -698,6 +779,9 @@ function Dashboard({
   invitationListError: string | undefined;
   invitationListState: InvitationListState;
   invitations: PendingInvitation[];
+  links: WorkspaceLink[];
+  linksError: string | undefined;
+  nextLinkCursor: string | undefined;
   onCancelInvitation: (invitationId: string) => Promise<void>;
   onDeleteAccount: (confirmationEmail: string) => Promise<boolean>;
   onDeleteWorkspace: () => Promise<boolean>;
@@ -706,8 +790,11 @@ function Dashboard({
     role: "analyst" | "editor",
     email: string,
   ) => Promise<boolean>;
+  onLoadMoreLinks: () => void;
+  onNavigate: (route: DashboardRoute) => void;
   onPublish: (event: FormEvent<HTMLFormElement>) => Promise<void>;
   onRetryInvitationList: () => void;
+  onRetryLinks: () => void;
   onUpdateDestination: (value: string) => void;
   publishedLink: PublishedLink | undefined;
   role: WorkspaceRole;
@@ -730,63 +817,223 @@ function Dashboard({
       <section className="auth-panel" aria-labelledby="workspace-title">
         <p className="eyebrow">WORKSPACE / {workspace.slug}</p>
         <h1 id="workspace-title">{workspace.name}</h1>
-        <p className="intro">Your workspace is ready for its first immutable destination.</p>
         <span className="role-chip">{formatRole(role)}</span>
-        {canPublish ? (
-          <form className="auth-form" onSubmit={onPublish}>
-            <TextField
-              label="Destination URL"
-              onChange={onUpdateDestination}
-              type="url"
-              value={value}
+        <nav aria-label="Workspace sections" className="dashboard-tabs">
+          {(["links", "analytics", "settings"] as DashboardRoute[]).map((route) => (
+            <a
+              aria-current={activeRoute === route ? "page" : undefined}
+              href={dashboardPath(route)}
+              key={route}
+              onClick={(event) => {
+                event.preventDefault();
+                onNavigate(route);
+              }}
+            >
+              {formatRole(route)}
+            </a>
+          ))}
+        </nav>
+        {activeRoute === "links" ? (
+          <section className="dashboard-section" aria-labelledby="links-title">
+            <div className="dashboard-heading">
+              <div>
+                <p className="eyebrow">LINK DIRECTORY</p>
+                <h2 id="links-title">Links</h2>
+              </div>
+              <p>Browse the immutable destinations in this workspace.</p>
+            </div>
+            {canPublish ? (
+              <form className="auth-form" onSubmit={onPublish}>
+                <TextField
+                  label="Destination URL"
+                  onChange={onUpdateDestination}
+                  type="url"
+                  value={value}
+                />
+                <FormError error={error} />
+                <button disabled={isSubmitting} type="submit">
+                  Publish link
+                </button>
+              </form>
+            ) : (
+              <p className="intro">You can browse links and analytics but cannot publish links.</p>
+            )}
+            {publishedLink ? (
+              <p className="published-link">
+                Published link:{" "}
+                <a
+                  href={getPublicLinkUrl(workspace.slug, publishedLink.slug)}
+                  rel="noreferrer"
+                  target="_blank"
+                >
+                  {getPublicLinkUrl(workspace.slug, publishedLink.slug)}
+                </a>
+              </p>
+            ) : null}
+            <LinkList
+              error={linksError}
+              isLoading={isLinksLoading}
+              links={links}
+              nextCursor={nextLinkCursor}
+              onLoadMore={onLoadMoreLinks}
+              onRetry={onRetryLinks}
+              workspaceSlug={workspace.slug}
             />
-            <FormError error={error} />
-            <button disabled={isSubmitting} type="submit">
-              Publish link
-            </button>
-          </form>
-        ) : (
-          <p className="intro">
-            Your analyst role can view link performance but cannot publish links.
-          </p>
-        )}
-        {publishedLink ? (
-          <p className="published-link">
-            Published link:{" "}
-            <strong>
-              {workspace.slug}/{publishedLink.slug}
-            </strong>
-          </p>
+          </section>
         ) : null}
-        {role.split(",").includes("owner") ? (
-          <InvitationPanel
-            error={invitationActionError}
-            listError={invitationListError}
-            listState={invitationListState}
-            invitationLink={invitationLink}
-            invitations={invitations}
-            isSubmitting={isInvitationSubmitting}
-            onCancel={onCancelInvitation}
-            onCreate={onCreateInvitation}
-            onRetryList={onRetryInvitationList}
+        {activeRoute === "analytics" ? (
+          <AnalyticsPanel
+            error={analyticsError}
+            isLoading={isAnalyticsLoading}
+            overview={analyticsOverview}
           />
         ) : null}
-        <AnalyticsPanel
-          error={analyticsError}
-          isLoading={isAnalyticsLoading}
-          overview={analyticsOverview}
-        />
-        <DeletionPanel
-          accountEmail={accountEmail}
-          isSubmitting={isDeletionSubmitting}
-          onDeleteAccount={onDeleteAccount}
-          onDeleteWorkspace={onDeleteWorkspace}
-          workspace={workspace}
-          workspaceRole={role}
-        />
+        {activeRoute === "settings" ? (
+          <section className="dashboard-section" aria-labelledby="settings-title">
+            <div className="dashboard-heading">
+              <div>
+                <p className="eyebrow">WORKSPACE CONTROLS</p>
+                <h2 id="settings-title">Settings</h2>
+              </div>
+            </div>
+            {role.split(",").includes("owner") ? (
+              <InvitationPanel
+                error={invitationActionError}
+                listError={invitationListError}
+                listState={invitationListState}
+                invitationLink={invitationLink}
+                invitations={invitations}
+                isSubmitting={isInvitationSubmitting}
+                onCancel={onCancelInvitation}
+                onCreate={onCreateInvitation}
+                onRetryList={onRetryInvitationList}
+              />
+            ) : null}
+            <DeletionPanel
+              accountEmail={accountEmail}
+              isSubmitting={isDeletionSubmitting}
+              onDeleteAccount={onDeleteAccount}
+              onDeleteWorkspace={onDeleteWorkspace}
+              workspace={workspace}
+              workspaceRole={role}
+            />
+          </section>
+        ) : null}
       </section>
     </main>
   );
+}
+
+function LinkList({
+  error,
+  isLoading,
+  links,
+  nextCursor,
+  onLoadMore,
+  onRetry,
+  workspaceSlug,
+}: {
+  error: string | undefined;
+  isLoading: boolean;
+  links: WorkspaceLink[];
+  nextCursor: string | undefined;
+  onLoadMore: () => void;
+  onRetry: () => void;
+  workspaceSlug: string;
+}) {
+  const [copyStatus, setCopyStatus] = useState<string>();
+
+  async function copyPublicUrl(url: string): Promise<void> {
+    try {
+      if (!navigator.clipboard) throw new Error("Clipboard access is unavailable.");
+      await navigator.clipboard.writeText(url);
+      setCopyStatus("Public link copied.");
+    } catch {
+      setCopyStatus("We couldn't copy that link. Select the URL and copy it manually.");
+    }
+  }
+
+  if (isLoading && links.length === 0) {
+    return (
+      <p className="dashboard-status" role="status">
+        Loading links…
+      </p>
+    );
+  }
+
+  if (error && links.length === 0) {
+    return (
+      <div className="dashboard-status" role="alert">
+        <p>{error}</p>
+        <button onClick={onRetry} type="button">
+          Try again
+        </button>
+      </div>
+    );
+  }
+
+  if (links.length === 0) {
+    return <p className="dashboard-status">No links published yet.</p>;
+  }
+
+  return (
+    <section className="link-list" aria-label="Published links">
+      {copyStatus ? (
+        <p className="copy-status" role="status">
+          {copyStatus}
+        </p>
+      ) : null}
+      {error ? (
+        <p className="form-error" role="alert">
+          {error}
+        </p>
+      ) : null}
+      <ul>
+        {links.map((link) => {
+          const publicUrl = getPublicLinkUrl(workspaceSlug, link.slug);
+          return (
+            <li key={link.id}>
+              <div>
+                <a href={publicUrl} rel="noreferrer" target="_blank">
+                  {publicUrl}
+                </a>
+                <p>{link.destinationUrl}</p>
+                <time dateTime={link.createdAt}>
+                  Created {new Date(link.createdAt).toLocaleDateString()}
+                </time>
+              </div>
+              <button
+                aria-label={`Copy ${publicUrl}`}
+                onClick={() => void copyPublicUrl(publicUrl)}
+                type="button"
+              >
+                Copy
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+      {nextCursor ? (
+        <button disabled={isLoading} onClick={onLoadMore} type="button">
+          {isLoading ? "Loading links" : "Load more links"}
+        </button>
+      ) : null}
+    </section>
+  );
+}
+
+function getPublicLinkUrl(workspaceSlug: string, slug: string): string {
+  const publicUrl = new URL(window.location.origin);
+  const dashboardPrefix = "app.";
+  const baseHostname = publicUrl.hostname.startsWith(dashboardPrefix)
+    ? publicUrl.hostname.slice(dashboardPrefix.length)
+    : publicUrl.hostname;
+
+  publicUrl.hostname = `${workspaceSlug}.${baseHostname}`;
+  publicUrl.pathname = `/${slug}`;
+  publicUrl.search = "";
+  publicUrl.hash = "";
+  return publicUrl.toString();
 }
 
 function DeletionPanel({

@@ -24,6 +24,7 @@ vi.mock("./workspace-gateway.js", () => ({
 
 vi.mock("./link-gateway.js", () => ({
   linkGateway: {
+    list: vi.fn(),
     publish: vi.fn(),
   },
 }));
@@ -42,10 +43,14 @@ describe("App", () => {
     vi.mocked(analyticsGateway.getOverview).mockResolvedValue({
       data: { breakdowns: { countries: [], devices: [], referrers: [] }, daily: [] },
     });
+    vi.mocked(linkGateway.list).mockResolvedValue({
+      data: { links: [], nextCursor: undefined },
+    } as never);
   });
 
   afterEach(() => {
     cleanup();
+    vi.unstubAllGlobals();
     window.history.replaceState(null, "", "/");
   });
 
@@ -304,6 +309,7 @@ describe("App", () => {
     render(<App />);
 
     await screen.findByRole("heading", { name: "Ada Studio" });
+    fireEvent.click(screen.getByRole("link", { name: "Settings" }));
     fireEvent.change(screen.getByLabelText("Invitation email"), {
       target: { value: "editor@example.test" },
     });
@@ -345,6 +351,7 @@ describe("App", () => {
 
     render(<App />);
 
+    fireEvent.click(await screen.findByRole("link", { name: "Settings" }));
     expect(await screen.findByText("editor@example.test (Editor)")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Cancel invitation" }));
 
@@ -371,6 +378,7 @@ describe("App", () => {
 
     render(<App />);
 
+    fireEvent.click(await screen.findByRole("link", { name: "Settings" }));
     expect(await screen.findByText("We couldn't load invitations.")).toBeInTheDocument();
     expect(screen.queryByText("No pending invitations.")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Retry invitations" }));
@@ -565,12 +573,233 @@ describe("App", () => {
     });
     fireEvent.submit(getForm("Publish link"));
 
-    expect(await screen.findByText("ada/cmfoo123")).toBeInTheDocument();
+    expect(await screen.findByText(/Published link:/)).toBeInTheDocument();
     expect(linkGateway.publish).toHaveBeenCalledWith({
       destinationUrl: "https://example.com/portfolio",
       organizationId: "workspace-1",
     });
     expect(screen.queryByLabelText(/slug/i)).not.toBeInTheDocument();
+  });
+
+  it("browses workspace links on the links route and uses the local public host", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    vi.stubGlobal("navigator", { clipboard: { writeText } });
+    window.history.replaceState(null, "", "/links");
+    vi.mocked(workspaceGateway.getSession).mockResolvedValue({
+      data: { user: { id: "member-1" } },
+    } as never);
+    vi.mocked(workspaceGateway.listWorkspaces).mockResolvedValue({
+      data: [{ id: "workspace-1", name: "Ada Studio", slug: "ada" }],
+    } as never);
+    vi.mocked(workspaceGateway.getMembership).mockResolvedValue({
+      data: { role: "analyst" },
+    } as never);
+    vi.mocked(linkGateway.list).mockResolvedValue({
+      data: {
+        links: [
+          {
+            createdAt: "2026-08-22T12:00:00.000Z",
+            destinationUrl: "https://example.com/portfolio",
+            id: "link-1",
+            publishedAt: "2026-08-22T12:00:00.000Z",
+            slug: "cmfoo123",
+          },
+        ],
+        nextCursor: undefined,
+      },
+    } as never);
+
+    render(<App />);
+
+    expect(await screen.findByRole("heading", { name: "Links" })).toBeInTheDocument();
+    expect(
+      await screen.findByRole("link", { name: "http://ada.localhost:3000/cmfoo123" }),
+    ).toHaveAttribute("href", "http://ada.localhost:3000/cmfoo123");
+    expect(screen.getByText("https://example.com/portfolio")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Publish link" })).not.toBeInTheDocument();
+    expect(linkGateway.list).toHaveBeenCalledWith({ organizationId: "workspace-1" });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Copy http://ada.localhost:3000/cmfoo123" }),
+    );
+    expect(await screen.findByRole("status")).toHaveTextContent("Public link copied.");
+    expect(writeText).toHaveBeenCalledWith("http://ada.localhost:3000/cmfoo123");
+  });
+
+  it("keeps a just-published link when an earlier directory request resolves late", async () => {
+    let resolveInitialList: ((value: unknown) => void) | undefined;
+    const initialList = new Promise((resolve) => {
+      resolveInitialList = resolve;
+    });
+    vi.mocked(workspaceGateway.getSession).mockResolvedValue({
+      data: { user: { id: "member-1" } },
+    } as never);
+    vi.mocked(workspaceGateway.listWorkspaces).mockResolvedValue({
+      data: [{ id: "workspace-1", name: "Ada Studio", slug: "ada" }],
+    } as never);
+    vi.mocked(workspaceGateway.getMembership).mockResolvedValue({
+      data: { role: "owner" },
+    } as never);
+    vi.mocked(linkGateway.list)
+      .mockImplementationOnce(() => initialList as never)
+      .mockResolvedValueOnce({
+        data: {
+          links: [
+            {
+              createdAt: "2026-08-22T12:00:00.000Z",
+              destinationUrl: "https://example.com/new-link",
+              id: "link-new",
+              publishedAt: "2026-08-22T12:00:00.000Z",
+              slug: "cmnewlink",
+            },
+            {
+              createdAt: "2026-08-21T12:00:00.000Z",
+              destinationUrl: "https://example.com/existing-link",
+              id: "link-existing",
+              publishedAt: "2026-08-21T12:00:00.000Z",
+              slug: "cmexisting",
+            },
+          ],
+          nextCursor: undefined,
+        },
+      } as never);
+    vi.mocked(linkGateway.publish).mockResolvedValue({
+      data: {
+        createdAt: "2026-08-22T12:00:00.000Z",
+        destinationUrl: "https://example.com/new-link",
+        id: "link-new",
+        organizationId: "workspace-1",
+        publishedAt: "2026-08-22T12:00:00.000Z",
+        slug: "cmnewlink",
+      },
+    } as never);
+
+    render(<App />);
+
+    await screen.findByRole("heading", { name: "Ada Studio" });
+    fireEvent.change(screen.getByLabelText("Destination URL"), {
+      target: { value: "https://example.com/new-link" },
+    });
+    fireEvent.submit(getForm("Publish link"));
+    expect(await screen.findByText(/Published link:/)).toBeInTheDocument();
+
+    if (!resolveInitialList) throw new Error("Expected the initial link directory request.");
+    resolveInitialList({
+      data: {
+        links: [
+          {
+            createdAt: "2026-08-21T12:00:00.000Z",
+            destinationUrl: "https://example.com/existing-link",
+            id: "link-existing",
+            publishedAt: "2026-08-21T12:00:00.000Z",
+            slug: "cmexisting",
+          },
+        ],
+        nextCursor: undefined,
+      },
+    });
+
+    expect(
+      await screen.findByRole("button", { name: "Copy http://ada.localhost:3000/cmnewlink" }),
+    ).toBeInTheDocument();
+    expect(await screen.findByText("https://example.com/existing-link")).toBeInTheDocument();
+  });
+
+  it("retries a failed link directory request", async () => {
+    vi.mocked(workspaceGateway.getSession).mockResolvedValue({
+      data: { user: { id: "member-1" } },
+    } as never);
+    vi.mocked(workspaceGateway.listWorkspaces).mockResolvedValue({
+      data: [{ id: "workspace-1", name: "Ada Studio", slug: "ada" }],
+    } as never);
+    vi.mocked(workspaceGateway.getMembership).mockResolvedValue({
+      data: { role: "analyst" },
+    } as never);
+    vi.mocked(linkGateway.list)
+      .mockResolvedValueOnce({
+        error: "We couldn't load links right now. Please try again.",
+      } as never)
+      .mockResolvedValueOnce({ data: { links: [], nextCursor: undefined } } as never);
+
+    render(<App />);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("We couldn't load links right now.");
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+
+    expect(await screen.findByText("No links published yet.")).toBeInTheDocument();
+    expect(linkGateway.list).toHaveBeenCalledTimes(2);
+  });
+
+  it("loads the next page of workspace links", async () => {
+    vi.mocked(workspaceGateway.getSession).mockResolvedValue({
+      data: { user: { id: "member-1" } },
+    } as never);
+    vi.mocked(workspaceGateway.listWorkspaces).mockResolvedValue({
+      data: [{ id: "workspace-1", name: "Ada Studio", slug: "ada" }],
+    } as never);
+    vi.mocked(workspaceGateway.getMembership).mockResolvedValue({
+      data: { role: "analyst" },
+    } as never);
+    vi.mocked(linkGateway.list)
+      .mockResolvedValueOnce({
+        data: {
+          links: [
+            {
+              createdAt: "2026-08-22T12:00:00.000Z",
+              destinationUrl: "https://example.com/first",
+              id: "link-1",
+              publishedAt: "2026-08-22T12:00:00.000Z",
+              slug: "cmfirst",
+            },
+          ],
+          nextCursor: "link-1",
+        },
+      } as never)
+      .mockResolvedValueOnce({
+        data: {
+          links: [
+            {
+              createdAt: "2026-08-21T12:00:00.000Z",
+              destinationUrl: "https://example.com/second",
+              id: "link-2",
+              publishedAt: "2026-08-21T12:00:00.000Z",
+              slug: "cmsecond",
+            },
+          ],
+          nextCursor: undefined,
+        },
+      } as never);
+
+    render(<App />);
+
+    await screen.findByText("https://example.com/first");
+    fireEvent.click(screen.getByRole("button", { name: "Load more links" }));
+
+    expect(await screen.findByText("https://example.com/second")).toBeInTheDocument();
+    expect(linkGateway.list).toHaveBeenLastCalledWith({
+      cursor: "link-1",
+      organizationId: "workspace-1",
+    });
+  });
+
+  it("navigates between tab routes without reloading the dashboard", async () => {
+    vi.mocked(workspaceGateway.getSession).mockResolvedValue({
+      data: { user: { id: "member-1" } },
+    } as never);
+    vi.mocked(workspaceGateway.listWorkspaces).mockResolvedValue({
+      data: [{ id: "workspace-1", name: "Ada Studio", slug: "ada" }],
+    } as never);
+    vi.mocked(workspaceGateway.getMembership).mockResolvedValue({
+      data: { role: "owner" },
+    } as never);
+
+    render(<App />);
+
+    await screen.findByRole("heading", { name: "Links" });
+    fireEvent.click(screen.getByRole("link", { name: "Analytics" }));
+    expect(
+      await screen.findByRole("heading", { name: "Redirect performance" }),
+    ).toBeInTheDocument();
+    expect(window.location.pathname).toBe("/analytics");
   });
 
   it("lets a member with editor among multiple roles publish a destination", async () => {
@@ -630,6 +859,7 @@ describe("App", () => {
 
     render(<App />);
 
+    fireEvent.click(await screen.findByRole("link", { name: "Analytics" }));
     expect(
       await screen.findByRole("heading", { name: "Redirect performance" }),
     ).toBeInTheDocument();
@@ -655,6 +885,7 @@ describe("App", () => {
     render(<App />);
 
     await screen.findByRole("heading", { name: "Ada Studio" });
+    fireEvent.click(screen.getByRole("link", { name: "Settings" }));
     fireEvent.change(screen.getByLabelText("Confirm workspace handle"), {
       target: { value: "wrong" },
     });
@@ -693,6 +924,7 @@ describe("App", () => {
     render(<App />);
 
     await screen.findByRole("heading", { name: "Ada Studio" });
+    fireEvent.click(screen.getByRole("link", { name: "Settings" }));
     fireEvent.change(screen.getByLabelText("Confirm account email"), {
       target: { value: "member@example.test" },
     });
