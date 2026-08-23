@@ -4,7 +4,7 @@
 
 Source: Juano approved this bugfix in Codex on 2026-08-22.
 
-Status: in progress.
+Status: delivered in PR #20 on 2026-08-23.
 
 ## Goal
 

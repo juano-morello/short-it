@@ -8,9 +8,9 @@ execution passes. The current generic lifecycle retry classifier does not recogn
 adapter-wrapped `40001` form. CSS remediation is tracked independently in PR #20 and is not a
 dependency or source of changes for this work item.
 
-Status: approved by Juano on 2026-08-22, with native membership-mutation restrictions approved on
-2026-08-23. Implementation is ready for review. Plan mode is not active in this task, so this
-document is the equivalent approval brief.
+Status: delivered in PR #21 on 2026-08-23. Juano approved the transaction-policy change on
+2026-08-22 and the native membership-mutation restrictions on 2026-08-23. Plan mode was not active
+in this task, so this document served as the equivalent approval brief.
 
 ## Goal
 
