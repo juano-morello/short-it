@@ -52,6 +52,7 @@ button:disabled {
 }
 
 .site-shell {
+  box-sizing: border-box;
   width: min(100%, var(--layout-max));
   margin: 0 auto;
   padding: 0 var(--layout-gutter) var(--space-24);

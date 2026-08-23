@@ -15,6 +15,12 @@ describe("application styles", () => {
     );
   });
 
+  it("includes shared shell gutters in its width so it remains centered", () => {
+    expect(stylesheet).toMatch(
+      /\.site-shell \{[\s\S]*box-sizing: border-box;[\s\S]*width: min\(100%, var\(--layout-max\)\);/,
+    );
+  });
+
   it("only references spacing tokens provided by the design system", () => {
     const definedTokens = new Set(spacingTokens.match(/--space-\d+(?=\s*:)/g));
     const referencedTokens = stylesheet.match(/--space-\d+/g) ?? [];
