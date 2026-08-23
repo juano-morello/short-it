@@ -3,8 +3,8 @@ import { describe, expect, it, vi } from "vitest";
 import { WorkspaceLifecycleService } from "./workspace-lifecycle.service.js";
 
 describe("WorkspaceLifecycleService", () => {
-  it("creates the workspace and its owner membership in one serializable transaction", async () => {
-    const user = { findUnique: vi.fn().mockResolvedValue({ id: "user-1" }) };
+  it("locks the authenticated user before checking their workspace count", async () => {
+    const lockUser = vi.fn().mockResolvedValue([{ id: "user-1" }]);
     const member = {
       count: vi.fn().mockResolvedValue(0),
       create: vi.fn().mockResolvedValue({ id: "member-1", role: "owner", userId: "user-1" }),
@@ -13,8 +13,8 @@ describe("WorkspaceLifecycleService", () => {
       create: vi.fn().mockResolvedValue({ id: "workspace-1", name: "Ada Studio", slug: "ada" }),
     };
     const transaction = vi.fn(async (operation, options) => {
-      expect(options).toMatchObject({ isolationLevel: "Serializable" });
-      return operation({ member, organization, user });
+      expect(options).toMatchObject({ isolationLevel: "ReadCommitted" });
+      return operation({ $queryRaw: lockUser, member, organization });
     });
     const service = WorkspaceLifecycleService.forTesting({
       database: { $transaction: transaction } as never,
@@ -38,6 +38,10 @@ describe("WorkspaceLifecycleService", () => {
         userId: "user-1",
       }),
     });
+    expect(lockUser).toHaveBeenCalledOnce();
+    expect(lockUser.mock.invocationCallOrder[0]).toBeLessThan(
+      member.count.mock.invocationCallOrder[0],
+    );
   });
 
   it("rejects invalid handles before opening a transaction", async () => {
@@ -54,7 +58,7 @@ describe("WorkspaceLifecycleService", () => {
 
   it("rejects creation after account deletion wins the lifecycle transaction", async () => {
     const transaction = vi.fn(async (operation) =>
-      operation({ user: { findUnique: vi.fn().mockResolvedValue(null) } }),
+      operation({ $queryRaw: vi.fn().mockResolvedValue([]) }),
     );
     const service = WorkspaceLifecycleService.forTesting({
       database: { $transaction: transaction } as never,
@@ -69,7 +73,7 @@ describe("WorkspaceLifecycleService", () => {
     const transaction = vi.fn(async (operation) =>
       operation({
         member: { count: vi.fn().mockResolvedValue(3) },
-        user: { findUnique: vi.fn().mockResolvedValue({ id: "user-1" }) },
+        $queryRaw: vi.fn().mockResolvedValue([{ id: "user-1" }]),
       }),
     );
     const service = WorkspaceLifecycleService.forTesting({
