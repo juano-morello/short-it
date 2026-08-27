@@ -42,7 +42,8 @@ routing, executable acceptance coverage, and the engineering records needed to e
 
 ## Local start
 
-1. Copy `.env.example` to `.env` and replace the development secret.
+1. Copy `.env.example` to `.env` to load the disposable local-demo settings. The fixed Compose
+   secrets are public development values and must not be reused outside this isolated stack.
 2. Run `pnpm install --frozen-lockfile`.
 3. Run `pnpm db:generate`.
 4. Run `docker compose up --build`.
@@ -55,7 +56,8 @@ PostgreSQL provider selection, DNS, and image publishing remain intentionally de
 
 The GitHub Quality workflow runs formatting, lint, type checks, unit and PostgreSQL integration tests,
 coverage, Prisma validation, Storybook, Docker and Compose builds, dependency audits, executable
-Gherkin profiles, and Playwright browser tests. Product-code coverage must remain at least 80 percent.
+Gherkin profiles, and Playwright browser tests. Coverage thresholds are 80 percent for the configured
+API source scope and the web modules loaded by the test suite.
 
 Common local commands:
 

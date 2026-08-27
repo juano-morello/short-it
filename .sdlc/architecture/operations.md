@@ -2,9 +2,9 @@
 
 ## Environments and ownership
 
-Local Compose is the only runnable environment in this scaffold. Juano owns production
-deployment and provider selection decisions. A future deployment should use US East and a
-managed PostgreSQL service.
+Local Compose is the only runnable environment for the v1 demo. Juano owns production deployment
+and provider selection decisions. A future deployment should use US East and a managed PostgreSQL
+service.
 
 Docker build contexts exclude local dependency trees, generated output, test artifacts, Git
 metadata, and environment files through `.dockerignore`. This preserves reproducible image
@@ -94,7 +94,8 @@ Redirect analytics use a separate PostgreSQL pool capped at two connections and 
 20-capture gate. Capture runs only after a successful `GET` response ends; `HEAD` redirects do not
 count. Per link and UTC day, no more than 100 distinct referrer hosts are retained, with further
 hosts grouped as `other`. Before production, the production operator must run
-`pnpm --filter @short-it/api analytics:prune` at least every five minutes, alert on any
+`node apps/api/dist/analytics/prune-analytics.js` in the production API image at least every five
+minutes, alert on any
 `redirect_analytics_prune_failed` event, and alert if no
 `redirect_analytics_pruned` event arrives for ten minutes. A failed prune is a retention breach:
 the operator must restore a successful run before the five-minute cleanup grace elapses. This
