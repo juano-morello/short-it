@@ -38,7 +38,8 @@ host, including its port.
 
 Link editing, deletion, filtering, search, sorting controls, per-link analytics, workspace
 switching, vanity slugs, schema migrations, new dependencies, production routing changes, and
-deployment are outside this work item. WORK-009 remains reserved for deferred production work.
+deployment are outside this work item. WORK-009 owns the deferred production web-image routing and
+SPA fallback.
 
 ## Acceptance scenarios
 

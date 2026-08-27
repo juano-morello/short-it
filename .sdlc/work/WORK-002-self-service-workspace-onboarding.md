@@ -111,11 +111,11 @@ One implementation worker owns the isolated feature worktree. Independent produc
 test, security, operations, and engineering-excellence reviewers inspect the final diff and
 verification evidence before readiness.
 
-## Follow-up
+## Resolved follow-up
 
-- Extract an app-owned authentication and workspace gateway before WORK-003, so Better Auth client
-  calls do not remain in the presentation component. This is a maintainability follow-up, not a
-  blocker for the verified self-service flow.
+The application now owns authentication and workspace integration in
+`apps/web/src/workspace-gateway.ts`. The presentation component calls that gateway instead of the
+Better Auth client directly. No remaining action is attached to this follow-up.
 
 ## Approval
 

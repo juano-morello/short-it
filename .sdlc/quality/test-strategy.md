@@ -2,7 +2,7 @@
 
 ## Behavior and BDD
 
-Core product slices use executable Gherkin. The scaffold begins with the health-probe feature.
+Core product slices use executable Gherkin. The suite begins with the health-probe feature.
 WORK-002 covers registration, workspace ownership, safe handle creation, and isolated rate-limit
 behavior. WORK-003 covers server-generated CUID link publication, destination safety, and
 tenant-scoped authorization. WORK-004 covers public-host redirects, redirect-time destination
@@ -11,11 +11,13 @@ authenticated workspace reporting, and aggregate retention. WORK-006 covers owne
 creation, matching-email acceptance with confirmation, role scope, atomic cancellation, and retention.
 WORK-007 covers owner-only workspace deletion, account-deletion ownership checks, typed
 confirmation, cascade behavior, native-create rejection, and the concurrent workspace-create and
-account-delete lifecycle boundary and native membership-mutation rejection. Unit coverage exercises
-bounded lifecycle retry and retryable exhaustion behavior. WORK-012 adds PostgreSQL races that prove the same-user user-row lock preserves
-the create/delete invariant and maximum workspace count while seven independent users create
-workspaces without retries. The live lifecycle scenarios require the losing create request to return
-its session-derived `401`, not an internal error.
+account-delete lifecycle boundary and native membership-mutation rejection. WORK-008 closes health
+and database-readiness response coverage. WORK-010 covers membership-scoped link browsing and native
+dashboard routes. Unit coverage exercises bounded lifecycle retry and retryable exhaustion behavior.
+WORK-012 adds PostgreSQL races that prove the same-user user-row lock preserves the create/delete
+invariant and maximum workspace count while seven independent users create workspaces without
+retries. The live lifecycle scenarios require the losing create request to return its
+session-derived `401`, not an internal error.
 
 ## Outside-in TDD workflow
 
@@ -26,7 +28,7 @@ minimum behavior, then add focused unit tests for policy and transformation edge
 
 Vitest covers controllers, destination policy, public-host parsing, aggregation, role policy, and UI
 components.
-The scaffold includes a health controller and dashboard metric-card test. WORK-002 adds
+The suite includes health-controller and dashboard metric-card tests. WORK-002 adds
 session-aware onboarding, sign-in, account-error, and workspace-retry UI coverage. Its rate-limit
 scenario runs alone against a fresh Compose stack because its counter is intentionally process-local.
 
@@ -49,9 +51,10 @@ dashboard components and supports future visual checks.
 WORK-007 adds browser coverage for workspace-handle and account-email confirmation, and returns the
 user to onboarding or the signed-out landing screen after deletion. Its live lifecycle scenarios
 also prove that concurrent workspace creation and account deletion produce either an owned workspace
-or a deleted account, never an ownerless workspace. WORK-012 runs seven independently scheduled
-onboarding tests at seven workers as the onboarding-contention regression and uses serial execution only as a diagnostic
-control.
+or a deleted account, never an ownerless workspace. WORK-010 verifies direct dashboard navigation,
+browser history, role-limited publication, and local public URLs. WORK-012 runs seven independently
+scheduled onboarding tests at seven workers as the onboarding-contention regression and uses serial
+execution only as a diagnostic control.
 
 ## Test data and isolation
 
@@ -62,7 +65,7 @@ PostgreSQL to the host. Fixtures use synthetic URLs, emails, countries, and refe
 ## Coverage policy
 
 The target is at least 80 percent line coverage for product code. Coverage exclusions require
-a recorded review. Generated Prisma artifacts are excluded. The initial coverage gate excludes
+a recorded review. Generated Prisma artifacts are excluded. The coverage gate excludes
 composition-root, environment, database-client, and auth-provider composition root; those boundaries are
 instead verified through the live Compose migration, probe, signup, and browser smoke checks.
 
