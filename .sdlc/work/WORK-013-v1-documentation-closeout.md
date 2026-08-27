@@ -4,7 +4,8 @@
 
 Source: Post-merge repository status audit approved by Juano on 2026-08-26.
 
-Status: approved and in progress.
+Status: delivered in PR #24 on 2026-08-27. PR #23 established the closeout, and PR #24 recovered
+the post-merge review corrections omitted from that merge.
 
 ## Goal
 
