@@ -92,7 +92,7 @@ residual bot risk.
 
 ## Operations and failure recovery
 
-Health and readiness probes are scaffolded. Redirect logs must use request IDs and avoid
+Health and readiness probes are delivered. Redirect logs must use request IDs and avoid
 destination query values, session values, raw IPs, and raw user agents. Redirect availability
 takes priority over telemetry persistence.
 

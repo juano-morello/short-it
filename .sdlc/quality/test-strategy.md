@@ -12,8 +12,10 @@ creation, matching-email acceptance with confirmation, role scope, atomic cancel
 WORK-007 covers owner-only workspace deletion, account-deletion ownership checks, typed
 confirmation, cascade behavior, native-create rejection, and the concurrent workspace-create and
 account-delete lifecycle boundary and native membership-mutation rejection. WORK-008 closes health
-and database-readiness response coverage. WORK-010 covers membership-scoped link browsing and native
-dashboard routes. Unit coverage exercises bounded lifecycle retry and retryable exhaustion behavior.
+and database-readiness response coverage. WORK-010 delivered historical executable evidence for
+membership-scoped link browsing and native dashboard routes. Its dedicated `bdd:link-browsing`
+profile is not currently part of Quality. Unit coverage exercises bounded lifecycle retry and
+retryable exhaustion behavior.
 WORK-012 adds PostgreSQL races that prove the same-user user-row lock preserves the create/delete
 invariant and maximum workspace count while seven independent users create workspaces without
 retries. The live lifecycle scenarios require the losing create request to return its
@@ -86,6 +88,10 @@ Run `pnpm format:check`, `pnpm lint`, `pnpm typecheck`, `pnpm test`,
 `pnpm bdd:workspace-lifecycle`, `pnpm e2e`, `pnpm coverage`,
 `pnpm db:validate`, `pnpm storybook:build`, `pnpm compose:config`,
 `pnpm docker:build`, and `pnpm security`.
+
+The repository also provides `pnpm bdd:link-browsing`. Quality does not currently invoke that
+dedicated profile, so WORK-010 delivery evidence remains historical until
+[TD-012](technical-debt.md#td-012-link-browsing-profile-absent-from-quality) is closed.
 
 ## Flake handling
 

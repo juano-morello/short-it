@@ -22,7 +22,7 @@ FR-001 through FR-009 are delivered. The v1 demo supports onboarding, static wor
 copyable invitations, immutable link publication, public redirects, privacy-conscious aggregate
 analytics, a routed link dashboard, workspace deletion, account deletion, health, and readiness.
 
-The authoritative milestone disposition is in `status.md`.
+The authoritative milestone disposition is in the [current status](status.md).
 
 ## Production-readiness candidates
 

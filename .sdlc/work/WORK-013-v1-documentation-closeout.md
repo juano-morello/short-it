@@ -111,7 +111,9 @@ The work adds no package, service, secret, schema, or provider dependency.
 No executable behavior changes, so no new Gherkin or application test is appropriate. Acceptance is
 verified through repository-level checks: document presence, required classifications, complete PR
 number coverage through 22, valid local Markdown targets, and absence of identified stale statements.
-The unchanged application suite remains a regression gate.
+These assertions verify the closeout revision but are not yet committed to the Quality workflow;
+[TD-010](../quality/technical-debt.md#td-010-continuous-documentation-integrity-checks) tracks
+continuous enforcement. The unchanged application suite remains a regression gate.
 
 ## Verification plan
 
@@ -121,8 +123,8 @@ The unchanged application suite remains a regression gate.
 - Run formatting, lint, type checking, unit tests, integration tests, BDD, browser tests, coverage,
   Prisma validation, Storybook and application builds, Docker and Compose validation, and dependency
   audits through the repository Quality workflow.
-- Require independent product, technical, test, security, operations, and engineering-excellence
-  review with all findings resolved or explicitly dispositioned.
+- Require independent product, technical, test, security, operations, architecture, and
+  engineering-excellence review with all findings resolved or explicitly dispositioned.
 
 ## Security and operations impact
 
@@ -133,7 +135,8 @@ customer payloads, or sensitive logs.
 ## Migration and rollback
 
 No migration or deployment is involved. Revert the documentation commits to roll back the change.
-The preserved PR 22 record remains backed up in a named Git stash until it is committed.
+The PR 22 record was preserved in a named Git stash before worktree transfer and is now part of this
+branch's committed history.
 
 ## Agent roster and routing
 
@@ -144,6 +147,7 @@ The preserved PR 22 record remains backed up in a named Git stash until it is co
 - Test reviewer: Terra at high effort for acceptance and verification evidence.
 - Security reviewer: Sol at extra-high effort for accepted-risk and hardening classifications.
 - Operations reviewer: Terra at high effort for production-readiness and runbook accuracy.
+- Architecture reviewer: Sol at high effort for architecture-record and boundary consistency.
 - Engineering-excellence reviewer: Sol at high effort for cohesion, maintainability, and prose quality.
 
 Reviewers remain independent and inspect the approved brief, repository rules, diff, and verification

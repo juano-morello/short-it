@@ -26,7 +26,8 @@ until an approved hosted rollout makes the application available to its intended
   own.
 - Health and PostgreSQL readiness probes support local orchestration.
 
-The detailed acceptance evidence and status for each requirement remain in `requirements.md`.
+The detailed acceptance evidence and status for each requirement remain in the
+[requirements record](requirements.md).
 
 ## Deliberate v1 limits
 
@@ -43,11 +44,20 @@ The detailed acceptance evidence and status for each requirement remain in `requ
 
 The merge at PR 22 passed the repository Quality workflow, including formatting, lint, type checks,
 unit and PostgreSQL integration tests, coverage, Prisma validation, Storybook, Docker and Compose
-builds, dependency audits, executable Gherkin profiles, and the Playwright browser suite. The
-repository coverage policy remains at least 80 percent for product code.
+builds, dependency audits, executable Gherkin profiles, and the Playwright browser suite. Coverage
+thresholds remain at least 80 percent for the configured API source scope and the web modules loaded
+by the test suite.
 
 Future changes must produce fresh verification. Historical merge evidence is recorded under
 `.sdlc/delivery/changes/` and does not replace verification of a new revision.
+
+The closeout checks for delivery-record coverage, relative Markdown links, and identified stale
+claims have been run for this revision but are not yet enforced by the Quality workflow. The
+technical-debt backlog tracks continuous document validation and complete web-source coverage.
+
+WORK-010 delivered executable membership-scoped link-browsing scenarios. Their dedicated profile is
+historical delivery evidence rather than a current Quality gate; adding it to Quality remains open
+as [TD-012](../quality/technical-debt.md#td-012-link-browsing-profile-absent-from-quality).
 
 ## Next decision
 
@@ -61,10 +71,10 @@ without turning them into product commitments.
 
 ## Authoritative links
 
-- Product intent: `product-brief.md`
-- Requirements and acceptance status: `requirements.md`
-- Product and production roadmap: `roadmap.md`
-- Architecture: `../architecture/overview.md`
-- Operations and hosted-rollout conditions: `../architecture/operations.md`
-- Technical debt: `../quality/technical-debt.md`
-- Accepted security risks: `../quality/threat-model.md`
+- [Product intent](product-brief.md)
+- [Requirements and acceptance status](requirements.md)
+- [Product and production roadmap](roadmap.md)
+- [Architecture](../architecture/overview.md)
+- [Operations and hosted-rollout conditions](../architecture/operations.md)
+- [Technical debt](../quality/technical-debt.md)
+- [Accepted security risks](../quality/threat-model.md)

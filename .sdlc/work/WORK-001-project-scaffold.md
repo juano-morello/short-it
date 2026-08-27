@@ -2,7 +2,8 @@
 
 ## Source and status
 
-Source: Juano's 2026-08-21 product discovery. Status: approved for scaffold execution.
+Source: Juano's 2026-08-21 product discovery. Status: delivered in scaffold commit `fbbc0bc`;
+subsequent product slices completed the v1 local demo.
 
 ## Goal
 
@@ -49,8 +50,9 @@ wildcard DNS remain the primary risks.
 
 ## TDD and BDD strategy
 
-The project uses outside-in TDD. BDD is approved and starts with an executable probe feature.
-The first product slice must add self-service browser scenarios before its release.
+The project used outside-in TDD. BDD began with an executable probe feature, and subsequent product
+slices added self-service browser scenarios and dedicated acceptance profiles. The current coverage
+and active gates are recorded in the [test strategy](../quality/test-strategy.md).
 
 ## Verification plan
 

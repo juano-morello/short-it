@@ -44,41 +44,43 @@ scope.
 
 ## Proposed approach
 
-The React dashboard uses Better Auth's React client and organization client plugin. It calls the
-existing same-origin Better Auth endpoints for sign-up, sign-in, session lookup, organization
-listing, and workspace creation. Server-side organization hooks enforce the
-handle policy. Better Auth creates the membership with the static `owner` role. Workspace
-creation keeps the active organization client-local because the current approved schema does not
-persist Better Auth's optional `activeOrganizationId` session field.
+The React dashboard uses Better Auth's React client and organization client plugin for sign-up,
+sign-in, session lookup, and organization listing. Workspace creation now uses the application-owned
+lifecycle endpoint delivered after this slice. That endpoint enforces the handle policy and creates
+the organization and static `owner` membership in one database transaction. The nullable
+`activeOrganizationId` column remains in the approved schema for Better Auth compatibility, but the
+current workspace-creation and selection flow does not write or rely on it. Selection remains
+client-local and is reconstructed from the organization listing. Native Better Auth organization
+creation is rejected.
 
-Account registration and organization creation remain separate. The browser explicitly signs in
-after registration, because automatic sign-in is disabled to return generic duplicate-account
-responses. If organization creation fails, the authenticated user remains on an onboarding screen
-that can retry safely. This avoids custom authentication persistence and makes the partial-success
-state visible.
-
-Better Auth writes an organization and its creator membership separately. If an infrastructure
-failure occurs between those writes, an operator can remove the orphaned organization through a
-documented database intervention before the user retries. This is an accepted demo-phase recovery
-procedure; a later production slice must replace it with application-level reconciliation.
+Account registration and workspace creation remain separate. The browser explicitly signs in after
+registration because automatic sign-in is disabled to return generic duplicate-account responses.
+If workspace creation fails, the authenticated user remains on an onboarding screen that can retry
+safely. The transaction rolls back the organization and membership together, so the superseded
+orphan-cleanup procedure is no longer required.
 
 ## Alternatives and tradeoffs
 
-A bespoke Nest onboarding endpoint could coordinate the calls, but it would duplicate Better
-Auth's session and organization authorization boundary. It was rejected for this slice. The
-separate registration, sign-in, and organization operations cannot provide a database transaction
-across registration and organization creation; the retry state is the deliberate recovery path.
+This slice originally rejected an application-owned Nest onboarding endpoint and used Better Auth's
+separate browser operations with operator cleanup for partial organization creation. WORK-007 and
+WORK-012 later established application-owned lifecycle transactions and concurrency invariants.
+The delivered endpoint keeps Better Auth as the session authority while providing an atomic
+organization-and-owner-membership boundary.
 
 ## Consequential decisions
 
 Juano approved the Better Auth browser client, a direct `better-auth@1.7.1` dependency in
-`apps/web`, and the recoverable three-operation onboarding flow on 2026-08-21.
+`apps/web`, and the original recoverable three-operation onboarding flow on 2026-08-21. Later
+approved lifecycle work superseded only the workspace-creation portion with the transactional
+application endpoint described above.
 
 ## Risks and dependencies
 
 The browser client depends on Better Auth's organization client plugin matching the configured
-server plugin. The existing `organizationLimit` of three workspaces still applies. The exact
-handle policy becomes a public URL contract and must be enforced server-side.
+server plugin. The application-owned maximum of three workspaces is enforced by a membership count
+inside the lifecycle transaction. The exact handle policy is a public URL contract and remains
+enforced server-side. Workspace creation relies on the application transaction and same-user
+lifecycle lock documented by the later lifecycle work.
 
 ## TDD and BDD strategy
 

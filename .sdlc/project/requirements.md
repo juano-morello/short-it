@@ -1,8 +1,9 @@
 # Requirements
 
 Milestone status: FR-001 through FR-009 are delivered for the local v1 demo. The application is not
-deployed or production-ready. See `status.md`, `roadmap.md`, and
-`../quality/technical-debt.md` for the current disposition and remaining work.
+deployed or production-ready. See the [current status](status.md), [roadmap](roadmap.md), and
+[technical-debt backlog](../quality/technical-debt.md) for the current disposition and remaining
+work.
 
 ## Functional
 
