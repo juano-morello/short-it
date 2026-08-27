@@ -1,5 +1,9 @@
 # Requirements
 
+Milestone status: FR-001 through FR-009 are delivered for the local v1 demo. The application is not
+deployed or production-ready. See `status.md`, `roadmap.md`, and
+`../quality/technical-debt.md` for the current disposition and remaining work.
+
 ## Functional
 
 | ID | Requirement | Acceptance evidence | Status |
@@ -37,7 +41,7 @@
 
 ## Open questions
 
-- What operational quota values should apply after the first self-service slice?
+- Which production quota and admission values should replace the single-process demo controls?
 - Which provider will own backups and recovery evidence in production?
 
 ## Deferred decisions

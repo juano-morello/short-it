@@ -39,9 +39,12 @@ approved_overrides:
   - "Production deployment, domain, database provider, and image registry are deferred."
   - "No email verification or delivery integration in the initial product scope."
 documents:
+  status: ".sdlc/project/status.md"
   product_brief: ".sdlc/project/product-brief.md"
   requirements: ".sdlc/project/requirements.md"
+  roadmap: ".sdlc/project/roadmap.md"
   architecture: ".sdlc/architecture/overview.md"
   test_strategy: ".sdlc/quality/test-strategy.md"
+  technical_debt: ".sdlc/quality/technical-debt.md"
   threat_model: ".sdlc/quality/threat-model.md"
   operations: ".sdlc/architecture/operations.md"

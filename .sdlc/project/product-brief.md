@@ -16,7 +16,7 @@ which links are useful without bolting analytics onto every destination.
 
 ## Goals
 
-- Let anyone sign up, create a workspace, and manage custom-slug links.
+- Let anyone sign up, create a workspace, and publish server-generated short links.
 - Publish workspace URLs in the form `handle.<configured-domain>/slug`.
 - Redirect reliably and show useful, privacy-conscious analytics.
 - Support scoped owner, editor, and analyst workspace roles.
@@ -26,7 +26,7 @@ which links are useful without bolting analytics onto every destination.
 
 - Customer-owned custom domains, billing, QR codes, a public third-party API, automatic
   abuse moderation, email delivery, email verification, or password-recovery delivery.
-- Production provider selection, DNS, image publishing, or live deployment in this scaffold.
+- Production provider selection, DNS, image publishing, or live deployment in v1.
 
 ## Scope
 
@@ -48,10 +48,11 @@ for 12 months.
 - Invitation capability is scoped by workspace role.
 - Invitations use copyable links in v1. No email service is configured.
 - Raw IP addresses and raw user-agent strings are not persisted.
-- User account deletion requires a user to leave, transfer, or delete all owned workspaces.
+- User account deletion requires the user to delete every workspace they own. Ownership transfer and
+  leaving a workspace are not available in v1.
 - Workspace deletion is irreversible.
 
 ## Open questions
 
 - The production host, managed PostgreSQL provider, and domain are explicitly deferred.
-- Brand language and public case-study content will be refined alongside product slices.
+- Public case-study editorial packaging remains separate from the repository's technical records.
