@@ -57,7 +57,7 @@ technical-debt backlog tracks continuous document validation and complete web-so
 
 WORK-010 delivered executable membership-scoped link-browsing scenarios. Their dedicated profile is
 historical delivery evidence rather than a current Quality gate; adding it to Quality remains open
-as [TD-009](../quality/technical-debt.md#td-009-link-browsing-profile-absent-from-quality).
+as [TD-012](../quality/technical-debt.md#td-012-link-browsing-profile-absent-from-quality).
 
 ## Next decision
 

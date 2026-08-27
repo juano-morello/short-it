@@ -29,22 +29,39 @@ Priority describes the trigger, not an approved implementation sequence.
 - Exit criteria: an approved shared admission and quota design covers each affected path, preserves
   redirect-first behavior, and passes multi-instance concurrency and failure tests.
 
-## TD-002: Analytics prune production-image verification
+## TD-002: Retention-job scheduling and alerting
 
 - Priority: P0 before production data is admitted.
 - Status: open.
-- Evidence: the compiled analytics and invitation prune commands exist, but Quality smoke-tests only
-  the invitation command in the production API image.
-- Risk: an unverified analytics command can fail when a hosted scheduler invokes it, allowing
-  expired visitor digests and aggregates to exceed their retention window.
-- Exit criteria: Quality runs the compiled analytics prune command in the production API image
-  against PostgreSQL and verifies a successful pruning outcome.
+- Evidence: analytics and invitation prune commands exist, but the repository provisions no
+  production scheduler or alerts.
+- Risk: expired daily visitor digests or invitation email records can outlive their bounded cleanup
+  grace, creating a retention breach.
+- Exit criteria: an operator-owned schedule runs both production commands at least every five
+  minutes and alerts on failures and missing success events according to the operations record.
 
-Hosted retention scheduling, alerting, observability, capacity, backup, and restore outcomes are
-production-readiness work owned by the [roadmap](../project/roadmap.md) and
-[operations record](../architecture/operations.md), not this backlog.
+## TD-003: Hosted observability and capacity evidence
 
-## TD-003: Production supply-chain and runtime hardening
+- Priority: P0 before hosted rollout.
+- Status: open.
+- Evidence: the API emits privacy-safe structured outcomes, but the demo has no metrics backend,
+  dashboard, alerting provider, or production load evidence.
+- Risk: operators cannot enforce the documented redirect, lifecycle, database-saturation, and
+  retention incident thresholds.
+- Exit criteria: the selected environment exposes required metrics and alerts, and approved load
+  tests define and meet connection-saturation, p95, p99, and 503 thresholds.
+
+## TD-004: Backup and restore evidence
+
+- Priority: P0 before hosted workspace or account deletion is enabled.
+- Status: open.
+- Evidence: deletion is irreversible and local Compose data is disposable. RPO 24 hours and RTO
+  24 hours are intentions only.
+- Risk: code rollback cannot recover deleted or corrupted data.
+- Exit criteria: a named provider and operator own backups, a restore rehearsal meets the approved
+  objectives, and the provider-specific recovery runbook records the evidence.
+
+## TD-005: Production supply-chain and runtime hardening
 
 - Priority: P0 before production release.
 - Status: open.
@@ -55,7 +72,7 @@ production-readiness work owned by the [roadmap](../project/roadmap.md) and
 - Exit criteria: actions are pinned immutably, production images are scanned under an approved
   policy, runtime identity is verified as non-root, and release evidence records the disposition.
 
-## TD-004: Fresh reauthentication for destructive actions
+## TD-006: Fresh reauthentication for destructive actions
 
 - Priority: P1 before broad public account access or a stricter production security posture.
 - Status: open as an accepted v1 demo risk.
@@ -65,9 +82,9 @@ production-readiness work owned by the [roadmap](../project/roadmap.md) and
 - Exit criteria: an approved reauthentication design protects both destructive actions and has
   browser, authorization, failure, and session-age coverage.
 
-## TD-005: PostgreSQL row-level security evaluation
+## TD-007: PostgreSQL row-level security evaluation
 
-- Priority: P0 before production release or hosted data admission.
+- Priority: P1 before treating database policy as a second tenant-isolation boundary.
 - Status: open evaluation.
 - Evidence: every organization-scoped application query is required to use a server-derived
   `organizationId`; PostgreSQL RLS was deliberately deferred.
@@ -75,7 +92,7 @@ production-readiness work owned by the [roadmap](../project/roadmap.md) and
 - Exit criteria: an approved investigation records whether RLS is necessary, its Prisma and
   migration consequences, and either an implementation plan or a reasoned rejection.
 
-## TD-006: Dashboard surface decomposition
+## TD-008: Dashboard surface decomposition
 
 - Priority: P2.
 - Status: open.
@@ -86,7 +103,18 @@ production-readiness work owned by the [roadmap](../project/roadmap.md) and
 - Exit criteria: route and feature surfaces have cohesive module boundaries without changing the
   native History API contract, authorization behavior, or verified user flows.
 
-## TD-007: Continuous documentation integrity checks
+## TD-009: Analytics prune production-image verification
+
+- Priority: P0 before production data is admitted.
+- Status: open.
+- Evidence: the compiled analytics and invitation prune commands exist, but Quality smoke-tests only
+  the invitation command in the production API image.
+- Risk: an unverified analytics command can fail when a hosted scheduler invokes it, allowing
+  expired visitor digests and aggregates to exceed their retention window.
+- Exit criteria: Quality runs the compiled analytics prune command in the production API image
+  against PostgreSQL and verifies a successful pruning outcome.
+
+## TD-010: Continuous documentation integrity checks
 
 - Priority: P2.
 - Status: open.
@@ -98,7 +126,7 @@ production-readiness work owned by the [roadmap](../project/roadmap.md) and
 - Exit criteria: a deterministic repository validator covers the maintained delivery and document
   invariants, demonstrates failure against representative mutations, and runs in Quality.
 
-## TD-008: Complete web coverage source enumeration
+## TD-011: Complete web coverage source enumeration
 
 - Priority: P1 before claiming an 80 percent threshold across all web product code.
 - Status: open.
@@ -110,7 +138,7 @@ production-readiness work owned by the [roadmap](../project/roadmap.md) and
 - Exit criteria: the web coverage configuration explicitly includes all reviewed product-source
   patterns, records justified exclusions, and passes the policy thresholds.
 
-## TD-009: Link-browsing profile absent from Quality
+## TD-012: Link-browsing profile absent from Quality
 
 - Priority: P1 before treating FR-009's dedicated BDD profile as a current regression gate.
 - Status: open.

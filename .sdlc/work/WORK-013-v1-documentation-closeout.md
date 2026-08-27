@@ -112,7 +112,7 @@ No executable behavior changes, so no new Gherkin or application test is appropr
 verified through repository-level checks: document presence, required classifications, complete PR
 number coverage through 22, valid local Markdown targets, and absence of identified stale statements.
 These assertions verify the closeout revision but are not yet committed to the Quality workflow;
-[TD-007](../quality/technical-debt.md#td-007-continuous-documentation-integrity-checks) tracks
+[TD-010](../quality/technical-debt.md#td-010-continuous-documentation-integrity-checks) tracks
 continuous enforcement. The unchanged application suite remains a regression gate.
 
 ## Verification plan

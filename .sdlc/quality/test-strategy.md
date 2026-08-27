@@ -91,7 +91,7 @@ Run `pnpm format:check`, `pnpm lint`, `pnpm typecheck`, `pnpm test`,
 
 The repository also provides `pnpm bdd:link-browsing`. Quality does not currently invoke that
 dedicated profile, so WORK-010 delivery evidence remains historical until
-[TD-009](technical-debt.md#td-009-link-browsing-profile-absent-from-quality) is closed.
+[TD-012](technical-debt.md#td-012-link-browsing-profile-absent-from-quality) is closed.
 
 ## Flake handling
 
