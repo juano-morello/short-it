@@ -47,10 +47,11 @@ scope.
 The React dashboard uses Better Auth's React client and organization client plugin for sign-up,
 sign-in, session lookup, and organization listing. Workspace creation now uses the application-owned
 lifecycle endpoint delivered after this slice. That endpoint enforces the handle policy and creates
-the organization and static `owner` membership in one database transaction. Active-organization
-selection remains client-local and is reconstructed from the organization listing; the approved
-schema does not persist Better Auth's optional `activeOrganizationId` session field. Native Better
-Auth organization creation is rejected.
+the organization and static `owner` membership in one database transaction. The nullable
+`activeOrganizationId` column remains in the approved schema for Better Auth compatibility, but the
+current workspace-creation and selection flow does not write or rely on it. Selection remains
+client-local and is reconstructed from the organization listing. Native Better Auth organization
+creation is rejected.
 
 Account registration and workspace creation remain separate. The browser explicitly signs in after
 registration because automatic sign-in is disabled to return generic duplicate-account responses.
